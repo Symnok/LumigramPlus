@@ -156,27 +156,23 @@ namespace LumigramPlus.App
         {
             _capture = new MediaCapture();
 
-            bool raw = AppSettings.RawMicrophone;
-
             var settings = new MediaCaptureInitializationSettings
             {
                 StreamingCaptureMode = StreamingCaptureMode.Audio,
 
-                // Communications puts capture through the platform's voice pipeline
-                // - echo cancellation, noise suppression, gain control - which is
-                // what a call wants and what managed code cannot do for itself at
-                // fifty frames a second.
+                // Communications puts capture through the platform's voice
+                // pipeline - echo cancellation, noise suppression, gain control -
+                // which is what a call wants and what managed code cannot do for
+                // itself at fifty frames a second.
                 //
-                // Raw takes the microphone untouched. Slower to sound good, but the
-                // only way to find out whether the processing is helping.
-                MediaCategory = raw ? MediaCategory.Other : MediaCategory.Communications,
-
-                AudioProcessing = raw
-                    ? Windows.Media.AudioProcessing.Raw
-                    : Windows.Media.AudioProcessing.Default,
+                // There was briefly a switch to take the microphone raw instead.
+                // Raw capture produced complete silence on this hardware, so the
+                // setting was only ever a way to break a call.
+                MediaCategory = MediaCategory.Communications,
+                AudioProcessing = Windows.Media.AudioProcessing.Default,
             };
 
-            Processing = raw ? "raw" : "platform voice processing";
+            Processing = "platform voice processing";
 
             await _capture.InitializeAsync(settings);
 

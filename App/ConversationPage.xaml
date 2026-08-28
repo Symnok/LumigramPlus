@@ -141,6 +141,41 @@
                 </Grid>
             </Border>
 
+            <!--
+              Shown in place of the message box while recording, in the same place so
+              the compose area does not change size. It carries a moving level
+              because a panel showing nothing move is indistinguishable from a
+              microphone that never opened.
+            -->
+            <Border x:Name="RecordingPanel" Visibility="Collapsed" Margin="0,8,0,0"
+                    Background="{ThemeResource PhoneChromeBrush}" Padding="10,8,10,8">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Ellipse Grid.Column="0" Width="16" Height="16" Fill="Red"
+                             VerticalAlignment="Center"/>
+
+                    <TextBlock x:Name="RecordingTime" Grid.Column="1" Text="0:00"
+                               Margin="10,0,10,0" Foreground="Red"
+                               VerticalAlignment="Center"/>
+
+                    <Border Grid.Column="2" Background="#40FFFFFF" Height="10"
+                            HorizontalAlignment="Left" Width="110"
+                            VerticalAlignment="Center">
+                        <Rectangle x:Name="RecordingLevel" Fill="Red" Width="0"
+                                   HorizontalAlignment="Left"/>
+                    </Border>
+
+                    <Button Grid.Column="3" Content="stop" Click="StopRecording_Click"
+                            Padding="10,2,10,2" MinWidth="0"/>
+                </Grid>
+            </Border>
+
             <TextBox x:Name="ComposeBox" TextWrapping="NoWrap" Margin="0,8,0,0"
                      KeyDown="Compose_KeyDown" PlaceholderText="message"/>
         </StackPanel>
@@ -208,8 +243,17 @@
     -->
     <Page.BottomAppBar>
         <CommandBar>
-            <AppBarButton x:Name="AttachButton" Icon="Attach" Label="attach"
-                          Click="Attach_Click"/>
+            <!-- A menu rather than three buttons: the bar is narrow, and every
+                 button on it is width the message box does not get. -->
+            <AppBarButton x:Name="AttachButton" Icon="Attach" Label="attach">
+                <AppBarButton.Flyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="file" Click="AttachFile_Click"/>
+                        <MenuFlyoutItem Text="voice message" Click="AttachVoice_Click"/>
+                        <MenuFlyoutItem Text="my location" Click="AttachLocation_Click"/>
+                    </MenuFlyout>
+                </AppBarButton.Flyout>
+            </AppBarButton>
             <!-- Only for one-to-one chats: there is no group call to place. -->
             <AppBarButton x:Name="CallButton" Icon="Phone" Label="call"
                           Visibility="Collapsed" Click="Call_Click"/>

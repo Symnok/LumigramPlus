@@ -9,6 +9,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
+using Lumigram.Audio;
 using Lumigram.Mtproto;
 
 namespace LumigramPlus.App
@@ -1121,7 +1122,181 @@ namespace LumigramPlus.App
         /// reasons this client exists. The picker suspends the app, so the answer
         /// arrives in FilePicked rather than here.
         /// </summary>
-        private void Attach_Click(object sender, RoutedEventArgs e)
+        // ---- location --------------------------------------------------------
+
+        /// <summary>
+        /// Sends where the phone is.
+        ///
+        /// A high accuracy fix with a short patience: a location message is worth
+        /// waiting a few seconds for and not worth waiting a minute for, and a fix
+        /// good to a street is good enough to say where you are.
+        /// </summary>
+        private async void AttachLocation_Click(object sender, RoutedEventArgs e)
+        {
+            SetBusy(true, "Finding your location...");
+
+            try
+            {
+                var locator = new Windows.Devices.Geolocation.Geolocator();
+                locator.DesiredAccuracy =
+                    Windows.Devices.Geolocation.PositionAccuracy.High;
+
+                Windows.Devices.Geolocation.Geoposition position =
+                    await locator.GetGeopositionAsync(
+                        TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(20));
+
+                Windows.Devices.Geolocation.Geocoordinate at = position.Coordinate;
+
+                int accuracy = (int)at.Accuracy;
+
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                await Upload.SendLocationAsync(
+                    client, TelegramService.Crypto, _inputPeer,
+                    at.Point.Position.Latitude, at.Point.Position.Longitude,
+                    accuracy, TelegramService.Info);
+
+                SetBusy(false, "");
+                Refresh();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // The one failure worth naming: it is fixed in the phone's settings
+                // and nowhere in this app.
+                SetBusy(false, "Location is turned off for this app. "
+                             + "Settings, then location.");
+            }
+            catch (Exception ex)
+            {
+                var rpc = ex as RpcException;
+                SetBusy(false, "Could not send your location: " +
+                               (rpc != null ? rpc.ErrorType : ex.Message));
+            }
+        }
+
+        // ---- voice messages --------------------------------------------------
+
+        private VoiceMessageRecorder _voiceRecorder;
+        private DispatcherTimer _recordingTimer;
+
+        private async void AttachVoice_Click(object sender, RoutedEventArgs e)
+        {
+            if (_voiceRecorder != null) return;
+
+            try
+            {
+                var recorder = new VoiceMessageRecorder();
+                await recorder.StartAsync();
+
+                _voiceRecorder = recorder;
+
+                RecordingPanel.Visibility = Visibility.Visible;
+                ComposeBox.Visibility = Visibility.Collapsed;
+
+                if (_recordingTimer == null)
+                {
+                    _recordingTimer = new DispatcherTimer();
+                    _recordingTimer.Interval = TimeSpan.FromMilliseconds(200);
+                    _recordingTimer.Tick += RecordingTick;
+                }
+
+                _recordingTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                _voiceRecorder = null;
+                SetBusy(false, "Could not start recording: " + ex.Message);
+            }
+        }
+
+        private void RecordingTick(object sender, object e)
+        {
+            VoiceMessageRecorder recorder = _voiceRecorder;
+            if (recorder == null) return;
+
+            int seconds = recorder.Seconds;
+
+            RecordingTime.Text = (seconds / 60) + ":" + (seconds % 60).ToString("00");
+            RecordingLevel.Width = recorder.TakeLevel() * 110 / 100;
+
+            // Stopped for the user rather than left running: everything is held in
+            // memory until it is sent.
+            if (seconds >= VoiceMessageRecorder.MaxSeconds)
+                StopRecording_Click(null, null);
+        }
+
+        /// <summary>
+        /// Ends the recording, encodes it and sends it.
+        ///
+        /// Encoding happens off the UI thread. It is a second or two of Opus at
+        /// whatever complexity the phone can manage, and doing it on the thread that
+        /// draws would freeze the app for exactly as long as the message is.
+        /// </summary>
+        private async void StopRecording_Click(object sender, RoutedEventArgs e)
+        {
+            VoiceMessageRecorder recorder = _voiceRecorder;
+            if (recorder == null) return;
+
+            _voiceRecorder = null;
+
+            if (_recordingTimer != null) _recordingTimer.Stop();
+
+            RecordingPanel.Visibility = Visibility.Collapsed;
+            ComposeBox.Visibility = Visibility.Visible;
+
+            try
+            {
+                short[] pcm = await recorder.StopAsync();
+                recorder.Dispose();
+
+                // Under a second is a slip of the finger rather than a message.
+                if (pcm.Length < VoiceMessageRecorder.Rate / 2)
+                {
+                    SetBusy(false, "Too short to send.");
+                    return;
+                }
+
+                SetBusy(true, "Encoding...");
+
+                EncodedVoice encoded = await Task.Run(delegate
+                {
+                    return VoiceEncoder.Encode(pcm, pcm.Length, VoiceMessageRecorder.Rate);
+                });
+
+                SetBusy(true, "Sending voice message...");
+
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                int at = 0;
+                byte[] file = encoded.File;
+
+                UploadedFile uploaded = await Upload.SendFileAsync(
+                    client, TelegramService.Crypto, "voice.ogg", file.Length,
+                    delegate (byte[] part)
+                    {
+                        int taken = Math.Min(part.Length, file.Length - at);
+                        Buffer.BlockCopy(file, at, part, 0, taken);
+                        at += taken;
+                        return taken;
+                    },
+                    null, TelegramService.Info);
+
+                await Upload.SendVoiceAsync(
+                    client, TelegramService.Crypto, _inputPeer, uploaded,
+                    encoded.DurationSeconds, encoded.Waveform, TelegramService.Info);
+
+                SetBusy(false, "");
+                Refresh();
+            }
+            catch (Exception ex)
+            {
+                var rpc = ex as RpcException;
+                SetBusy(false, "Could not send the voice message: " +
+                               (rpc != null ? rpc.ErrorType : ex.Message));
+            }
+        }
+
+        private void AttachFile_Click(object sender, RoutedEventArgs e)
         {
             var picker = new Windows.Storage.Pickers.FileOpenPicker();
             picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;

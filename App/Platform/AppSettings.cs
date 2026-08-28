@@ -30,7 +30,6 @@ namespace LumigramPlus.App
         private const string NotificationsKey = "notifications";
         private const string NotificationSoundKey = "notificationSound";
         private const string BackgroundKey = "backgroundMode";
-        private const string RawMicKey = "rawMicrophone";
 
         /// <summary>
         /// Whether pictures are fetched as soon as they appear.
@@ -107,25 +106,6 @@ namespace LumigramPlus.App
                 try { ApplicationData.Current.LocalSettings.Values[BackgroundKey] = (int)value; }
                 catch (Exception) { }
             }
-        }
-
-        /// <summary>
-        /// Whether to take the microphone without the platform's voice processing.
-        ///
-        /// The communications category runs capture through the system's echo
-        /// canceller, noise suppression and automatic gain. That is the right choice
-        /// for a call in principle - none of it could be done in managed code at
-        /// fifty frames a second - but the echo canceller expects to know what is
-        /// being played, and this app plays through a separate media element it has
-        /// no way to hand over. A canceller subtracting the wrong reference does not
-        /// fail quietly; it chews holes in the speech.
-        ///
-        /// This exists to settle that by comparison rather than by argument.
-        /// </summary>
-        public static bool RawMicrophone
-        {
-            get { return Read(RawMicKey, false); }
-            set { Write(RawMicKey, value); }
         }
 
         private static bool Read(string key, bool fallback)

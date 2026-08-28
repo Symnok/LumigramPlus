@@ -32,7 +32,6 @@ namespace LumigramPlus.App
             AutoLoadSwitch.IsOn = AppSettings.AutoLoadPhotos;
             NotificationsSwitch.IsOn = AppSettings.Notifications;
             SoundSwitch.IsOn = AppSettings.NotificationSound;
-            RawMicSwitch.IsOn = AppSettings.RawMicrophone;
             BackgroundBox.SelectedIndex = (int)AppSettings.BackgroundMode;
             DescribeBackground(null);
             ShowLastRun();
@@ -227,13 +226,6 @@ namespace LumigramPlus.App
                     BackgroundText.Text = "Messages are only noticed while the app is open.";
                     break;
             }
-        }
-
-        private void RawMic_Toggled(object sender, RoutedEventArgs e)
-        {
-            if (_loading) return;
-
-            AppSettings.RawMicrophone = RawMicSwitch.IsOn;
         }
 
         private void Sound_Toggled(object sender, RoutedEventArgs e)

@@ -189,12 +189,16 @@
     <Compile Include="Platform\VoipTransport.cs" />
     <Compile Include="Platform\VoicePlayer.cs" />
     <Compile Include="Platform\VoiceRecorder.cs" />
+    <Compile Include="Platform\VoiceMessageRecorder.cs" />
     <Compile Include="Platform\BackgroundLog.cs" />
     <Compile Include="Platform\Continuation.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <!-- Already WinRT, so they came across from the Silverlight client untouched. -->
+    <Compile Include="..\Shared\VoiceEncoder.cs">
+      <Link>Platform\VoiceEncoder.cs</Link>
+    </Compile>
     <Compile Include="..\Shared\PhoneTransport.cs">
       <Link>Platform\PhoneTransport.cs</Link>
     </Compile>
