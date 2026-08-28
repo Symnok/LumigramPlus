@@ -1058,9 +1058,51 @@ namespace LumigramPlus.App
             var item = element.DataContext as MessageItem;
             if (item == null || item.Media == null) return;
 
+            // A location has nothing to fetch - the coordinates arrived with the
+            // message - so the tap goes straight to showing it.
+            if (item.Media.Kind == MediaKind.Location)
+            {
+                ShowOnMap(item.Media);
+                return;
+            }
+
             // A single tap fetches. Playing is on the double tap, so that tapping a
             // preview to see it bigger never starts a video by accident.
             LoadMedia(item);
+        }
+
+        /// <summary>
+        /// Opens a received location in the phone's own maps app.
+        ///
+        /// No map is drawn here. Rendering one would mean tiles, a network budget
+        /// and a control this app does not have, where the phone already ships
+        /// something better - with the user's own maps, their downloaded regions and
+        /// directions from where they are standing. Handing the coordinates over is
+        /// one line.
+        ///
+        /// The invariant culture matters more than it looks: the URI wants a decimal
+        /// point, and on a phone set to a language that writes 55,75 the default
+        /// formatting produces a pair of coordinates the maps app reads as four.
+        /// </summary>
+        private async void ShowOnMap(MediaInfo location)
+        {
+            try
+            {
+                string at = location.Latitude.ToString(
+                                System.Globalization.CultureInfo.InvariantCulture) +
+                            "~" +
+                            location.Longitude.ToString(
+                                System.Globalization.CultureInfo.InvariantCulture);
+
+                var uri = new Uri("bingmaps:?cp=" + at + "&lvl=16");
+
+                if (!await Windows.System.Launcher.LaunchUriAsync(uri))
+                    SetBusy(false, "Nothing on this phone opens maps.");
+            }
+            catch (Exception ex)
+            {
+                SetBusy(false, "Cannot open maps: " + ex.Message);
+            }
         }
 
         /// <summary>

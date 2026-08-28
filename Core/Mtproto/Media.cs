@@ -79,7 +79,7 @@ namespace Lumigram.Mtproto
                     return "video" + (DurationSeconds > 0 ? " " + DurationSeconds + "s" : "");
                 case MediaKind.Location:
                     return "location " + Latitude.ToString("F5") + ", " +
-                                         Longitude.ToString("F5");
+                                         Longitude.ToString("F5") + " - tap for the map";
                 case MediaKind.Voice:
                     return "voice message" + (DurationSeconds > 0 ? " " + Clock() : "");
                 case MediaKind.Document:
