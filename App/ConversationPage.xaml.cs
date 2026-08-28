@@ -355,6 +355,8 @@ namespace LumigramPlus.App
             CallButton.Visibility = _peer.Kind == "user"
                 ? Visibility.Visible : Visibility.Collapsed;
 
+            CollectRecordedVideo();
+
             PeerTitle.Text = _peer.Title ?? "chat";
             _inputPeer = Messages.InputPeerFor(_peer.Kind, _peer.PeerId, _peer.AccessHash);
 
@@ -724,7 +726,18 @@ namespace LumigramPlus.App
 
                         var ignored = Dispatcher.RunAsync(
                             Windows.UI.Core.CoreDispatcherPriority.Low,
-                            delegate { item.MediaNote = "loading " + (got * 100 / total) + "%"; });
+                            delegate
+                            {
+                                // Checked here rather than before dispatching. These
+                                // run at low priority and queue up, so the last of
+                                // them lands after the download has finished and
+                                // overwrites whatever the finished state said - the
+                                // note stuck at "loading 100%", and with it the only
+                                // thing on screen saying the video could be played.
+                                if (item.Downloaded) return;
+
+                                item.MediaNote = "loading " + (got * 100 / total) + "%";
+                            });
                     });
 
                 if (uri == null)
@@ -750,9 +763,7 @@ namespace LumigramPlus.App
                 // Nothing to draw for a document, so say it is here and what can be
                 // done with it - otherwise a finished download looks like nothing
                 // happened.
-                item.MediaNote = item.Media.Kind == MediaKind.Video
-                    ? item.Media.Describe() + " - tap to play"
-                    : item.Media.Describe() + " - hold to save";
+                item.MediaNote = item.Media.Describe() + " - hold to save";
             }
             catch (Exception ex)
             {
@@ -1214,6 +1225,30 @@ namespace LumigramPlus.App
                 SetBusy(false, "Could not send your location: " +
                                (rpc != null ? rpc.ErrorType : ex.Message));
             }
+        }
+
+        // ---- video messages --------------------------------------------------
+
+        private void AttachVideo_Click(object sender, RoutedEventArgs e)
+        {
+            Frame.Navigate(typeof(VideoCapturePage));
+        }
+
+        /// <summary>
+        /// Sends a video recorded on the capture page, if one came back.
+        ///
+        /// Picked up on the way in rather than handed over, because navigating back
+        /// returns nothing. Taken and cleared in one step, so a failure to send does
+        /// not leave the same recording waiting on every later visit.
+        /// </summary>
+        private async void CollectRecordedVideo()
+        {
+            Windows.Storage.StorageFile file = VideoCapture.Recorded;
+            if (file == null) return;
+
+            VideoCapture.Recorded = null;
+
+            await SendFileAsync(file);
         }
 
         // ---- voice messages --------------------------------------------------

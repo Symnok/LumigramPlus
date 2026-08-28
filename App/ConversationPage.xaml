@@ -250,6 +250,7 @@
                     <MenuFlyout>
                         <MenuFlyoutItem Text="file" Click="AttachFile_Click"/>
                         <MenuFlyoutItem Text="voice message" Click="AttachVoice_Click"/>
+                        <MenuFlyoutItem Text="video message" Click="AttachVideo_Click"/>
                         <MenuFlyoutItem Text="my location" Click="AttachLocation_Click"/>
                     </MenuFlyout>
                 </AppBarButton.Flyout>

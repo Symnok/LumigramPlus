@@ -118,6 +118,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="VideoCapturePage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="FindPage.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -153,6 +157,9 @@
     </Compile>
     <Compile Include="QrLoginPage.xaml.cs">
       <DependentUpon>QrLoginPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="VideoCapturePage.xaml.cs">
+      <DependentUpon>VideoCapturePage.xaml</DependentUpon>
     </Compile>
     <Compile Include="FindPage.xaml.cs">
       <DependentUpon>FindPage.xaml</DependentUpon>
