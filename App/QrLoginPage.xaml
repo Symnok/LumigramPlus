@@ -1,0 +1,59 @@
+<Page
+    x:Class="LumigramPlus.App.QrLoginPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid Margin="16,24,16,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="LUMIGRAM+" FontSize="14" Opacity="0.6"/>
+            <TextBlock Text="sign in" FontSize="30"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1">
+            <StackPanel>
+                <TextBlock x:Name="ScanText"
+                           Text="On another device open Telegram, then Settings - Devices - Link Desktop Device, and scan this."
+                           TextWrapping="Wrap" Opacity="0.75" Margin="0,0,0,12"/>
+
+                <!-- White plate behind the code: a camera reads dark-on-light, and
+                     the phone theme may be either way round. -->
+                <Border x:Name="QrPlate" Background="White" Padding="12"
+                        HorizontalAlignment="Center">
+                    <Image x:Name="QrImage" Stretch="None"/>
+                </Border>
+
+                <TextBlock x:Name="StatusText" TextWrapping="Wrap" Margin="0,12,0,0"/>
+
+                <!-- Only shown when the account has two-step verification on. -->
+                <StackPanel x:Name="PasswordPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                    <TextBlock Text="This account has a password. Enter it to finish signing in."
+                               TextWrapping="Wrap" Opacity="0.75"/>
+                    <!-- Enter submits, so the login does not depend on reaching a
+                         button that the on-screen keyboard may be covering. -->
+                    <PasswordBox x:Name="PasswordBox" Margin="0,8,0,0"
+                                 KeyDown="Password_KeyDown"/>
+                    <Button x:Name="PasswordButton" Content="sign in" Click="Password_Click"
+                            Margin="0,8,0,0" HorizontalAlignment="Stretch"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--
+          Height-capped on purpose. This row is Auto, so an unbounded log grows
+          downward and steals the space from the row above it - which is where the
+          code being scanned lives. A diagnostic that hides the thing it is
+          diagnosing is worse than none.
+        -->
+        <ScrollViewer Grid.Row="2" MaxHeight="96" Margin="0,8,0,0"
+                      VerticalScrollBarVisibility="Auto">
+            <TextBlock x:Name="LogText" TextWrapping="Wrap" FontSize="12" Opacity="0.5"/>
+        </ScrollViewer>
+    </Grid>
+</Page>

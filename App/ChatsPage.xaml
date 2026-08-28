@@ -1,0 +1,133 @@
+<Page
+    x:Class="LumigramPlus.App.ChatsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid Margin="16,24,16,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+            <TextBlock Text="LUMIGRAM+" FontSize="14" Opacity="0.6"/>
+            <TextBlock Text="chats" FontSize="30"/>
+        </StackPanel>
+
+        <!--
+          Folder tabs. A scrolling row of buttons rather than a Pivot: a Pivot owns
+          the page and swipes between fixed sections, where these are read from the
+          account and change. One list underneath serves them all.
+        -->
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled"
+                      HorizontalScrollMode="Auto" VerticalScrollMode="Disabled"
+                      Margin="0,0,0,4">
+            <StackPanel x:Name="FolderTabs" Orientation="Horizontal"/>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Margin="0,0,0,8">
+            <ProgressBar x:Name="Busy" IsIndeterminate="True" Visibility="Collapsed"/>
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap" Opacity="0.7" FontSize="14"/>
+        </StackPanel>
+
+        <ListView x:Name="DialogList" Grid.Row="3"
+                  SelectionMode="None" IsItemClickEnabled="True"
+                  ItemClick="Dialog_Click">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,8,0,8" Holding="Dialog_Holding"
+                          Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- The picture sits over the initials rather than
+                             replacing them: many chats have no photo at all, and the
+                             letters are the answer for those rather than a
+                             placeholder waiting to be filled. -->
+                        <Grid Grid.Column="0" Width="44" Height="44" Margin="0,0,12,0"
+                              VerticalAlignment="Top">
+                            <Border Background="{ThemeResource PhoneAccentBrush}">
+                                <TextBlock Text="{Binding Initials}" Foreground="White"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <Image Source="{Binding Avatar}" Stretch="UniformToFill"/>
+                        </Grid>
+
+                        <StackPanel Grid.Column="1">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                                           FontSize="20"/>
+                                <!--
+                                  A crossed-out speaker, drawn rather than written.
+                                  A word costs a piece of the title on a narrow
+                                  screen, and this platform has no icon font that
+                                  can be relied on - a missing glyph shows as an
+                                  empty box.
+                                -->
+                                <Canvas Width="17" Height="12" Opacity="0.65"
+                                        Margin="8,6,0,0" VerticalAlignment="Center"
+                                        Visibility="{Binding MutedVisibility}">
+                                    <Path Fill="Red"
+                                          Data="M0,4 L2.5,4 L6,0.5 L6,11.5 L2.5,8 L0,8 Z"/>
+                                    <Path Stroke="Red" StrokeThickness="1.4"
+                                          Data="M9.5,3.5 L15.5,8.5 M15.5,3.5 L9.5,8.5"/>
+                                </Canvas>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Preview}" Opacity="0.6" FontSize="14"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <Border Grid.Column="2" Visibility="{Binding UnreadVisibility}"
+                                Background="{ThemeResource PhoneAccentBrush}"
+                                CornerRadius="11" Padding="8,2,8,2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding UnreadCount}" Foreground="White"
+                                       FontSize="14"/>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <!-- Shown only while the server says there are more. Separate from refresh
+             on purpose: refresh means "read the list again from the top", which is
+             what puts the unread counts right, and appending would fight that. -->
+        <Button x:Name="LoadMoreButton" Grid.Row="4" Content="load more chats"
+                Click="LoadMore_Click" Visibility="Collapsed"
+                HorizontalAlignment="Stretch" Margin="0,8,0,8"/>
+        <!--
+          The in-app banner.
+
+          Windows Phone does not show an app its own toast while that app is on
+          screen, and the foreground is the only case this build has - so the
+          notification the user actually sees has to be drawn here. Last in the grid
+          and spanning every row, so it paints over what is underneath.
+        -->
+        <Border x:Name="BannerPanel" Grid.RowSpan="5" Visibility="Collapsed"
+                VerticalAlignment="Top" Padding="12,10,12,10"
+                Tapped="Banner_Tapped"
+                Background="{ThemeResource PhoneAccentBrush}">
+            <StackPanel>
+                <TextBlock x:Name="BannerTitle" Foreground="White" TextWrapping="NoWrap"
+                           FontSize="18"/>
+                <TextBlock x:Name="BannerBody" Foreground="White" TextWrapping="Wrap"
+                           FontSize="14" Opacity="0.9"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+
+    <Page.BottomAppBar>
+        <CommandBar>
+            <AppBarButton Icon="Refresh" Label="refresh" Click="Refresh_Click"/>
+            <AppBarButton Icon="Add" Label="find" Click="Find_Click"/>
+            <AppBarButton Icon="Setting" Label="settings" Click="Settings_Click"/>
+        </CommandBar>
+    </Page.BottomAppBar>
+</Page>

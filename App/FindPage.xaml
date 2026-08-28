@@ -1,0 +1,47 @@
+﻿<Page
+    x:Class="LumigramPlus.App.FindPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid Margin="16,24,16,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="LUMIGRAM+" FontSize="14" Opacity="0.6"/>
+            <TextBlock Text="find someone" FontSize="30"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1">
+            <TextBox x:Name="QueryBox" PlaceholderText="@username or +phone number"
+                     InputScope="Default" KeyDown="Query_KeyDown"/>
+
+            <TextBlock Text="A username, with or without the @, or a phone number in full including the country code. Looking someone up does not add them to your contacts."
+                       TextWrapping="Wrap" Opacity="0.7" FontSize="13" Margin="0,8,0,0"/>
+
+            <Button x:Name="FindButton" Content="find" Click="Find_Click"
+                    HorizontalAlignment="Stretch" Margin="0,16,0,0"/>
+
+            <TextBlock x:Name="StatusText" Text="" TextWrapping="Wrap" Opacity="0.8"
+                       Margin="0,16,0,0"/>
+
+            <!-- Both offered together: having found the person, the next thing
+                 wanted is either one, and going back to a chat list to pick them
+                 again would be a step for nothing. -->
+            <StackPanel x:Name="FoundPanel" Visibility="Collapsed" Margin="0,16,0,0">
+                <TextBlock x:Name="FoundText" Text="" FontSize="24" TextWrapping="Wrap"/>
+
+                <Button x:Name="MessageButton" Content="send a message"
+                        HorizontalAlignment="Stretch" Margin="0,12,0,0"
+                        Click="Message_Click"/>
+
+                <Button x:Name="CallButton" Content="call"
+                        HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                        Click="Call_Click"/>
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</Page>

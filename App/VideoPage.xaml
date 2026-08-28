@@ -1,0 +1,27 @@
+<Page
+    x:Class="LumigramPlus.App.VideoPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Black">
+
+    <Grid>
+        <!--
+          The thing Silverlight could not do, and the reason for this client.
+          MediaElement decodes H.264 in MP4 on the phone itself, so a video arrives
+          and plays here rather than having to be handed to another app.
+        -->
+        <MediaElement x:Name="Player" AreTransportControlsEnabled="True"
+                      AutoPlay="True" Stretch="Uniform"
+                      MediaFailed="Player_Failed"/>
+
+        <TextBlock x:Name="StatusText" Text="" Foreground="White" TextWrapping="Wrap"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24"/>
+    </Grid>
+
+    <Page.BottomAppBar>
+        <CommandBar>
+            <AppBarButton x:Name="SaveButton" Icon="Save" Label="save to gallery"
+                          Click="Save_Click"/>
+        </CommandBar>
+    </Page.BottomAppBar>
+</Page>

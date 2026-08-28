@@ -1,0 +1,220 @@
+<Page
+    x:Class="LumigramPlus.App.ConversationPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid x:Name="Root" Margin="12,24,12,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="PeerTitle" Grid.Row="0" Text="chat" FontSize="26"
+                   TextTrimming="CharacterEllipsis" Margin="4,0,0,4"/>
+
+        <StackPanel Grid.Row="1" Margin="4,0,0,6">
+            <ProgressBar x:Name="Busy" IsIndeterminate="True" Visibility="Collapsed"/>
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap" Opacity="0.7" FontSize="13"/>
+        </StackPanel>
+
+        <!--
+          A ListView rather than an ItemsControl in a ScrollViewer, and doing its own
+          scrolling. ScrollIntoView drives the list's own scroll viewer, so wrapping
+          it in another one and disabling its own leaves nothing for it to move.
+        -->
+        <ListView x:Name="MessageList" Grid.Row="2" SelectionMode="None">
+            <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="MinHeight" Value="0"/>
+                    </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <!--
+                          The menu hangs off the whole bubble rather than off the
+                          picture. Attached to the picture it existed only for
+                          photos, which left every document with no way to reach
+                          "save as" at all.
+
+                          Saving is last and only shown for attachments. It used to
+                          be the whole menu, so a long press on plain text offered
+                          "save as" - an action with nothing to save.
+                        -->
+                        <Border Margin="{Binding Margin}" CornerRadius="6" Padding="10,6,10,6"
+                                Background="{Binding Background}"
+                                HorizontalAlignment="{Binding Align}"
+                                Holding="Message_Holding">
+                            <FlyoutBase.AttachedFlyout>
+                                <MenuFlyout>
+                                    <MenuFlyoutItem Text="reply"
+                                                    Visibility="{Binding ActionVisibility}"
+                                                    Click="ReplyMenu_Click"/>
+                                    <MenuFlyoutItem Text="forward..."
+                                                    Visibility="{Binding ActionVisibility}"
+                                                    Click="ForwardMenu_Click"/>
+                                    <MenuFlyoutItem Text="delete"
+                                                    Visibility="{Binding ActionVisibility}"
+                                                    Click="DeleteMenu_Click"/>
+                                    <MenuFlyoutItem Text="delete for everyone"
+                                                    Visibility="{Binding RevokeVisibility}"
+                                                    Click="DeleteAllMenu_Click"/>
+                                    <MenuFlyoutItem Text="save to gallery"
+                                                    Visibility="{Binding GalleryVisibility}"
+                                                    Click="SaveMenu_Click"/>
+                                    <MenuFlyoutItem Text="save as..."
+                                                    Visibility="{Binding SaveVisibility}"
+                                                    Click="SaveAsMenu_Click"/>
+                                </MenuFlyout>
+                            </FlyoutBase.AttachedFlyout>
+                            <StackPanel>
+                                <!-- Where the reading stopped last time. -->
+                                <Border Visibility="{Binding UnreadMarkVisibility}"
+                                        Background="{ThemeResource PhoneAccentBrush}"
+                                        Height="2" Margin="0,2,0,6"/>
+                                <!-- Only in groups, and never on our own messages:
+                                     in a one-to-one chat the sender is never in
+                                     doubt, and labelling every line is noise. -->
+                                <TextBlock Text="{Binding SenderName}"
+                                           Visibility="{Binding SenderVisibility}"
+                                           FontSize="13" Opacity="0.8" Margin="0,0,0,2"/>
+                                <!-- Tapping the caption is what fetches the picture,
+                                     so it stays tappable after one is shown too. -->
+                                <TextBlock Text="{Binding MediaNote}"
+                                           Visibility="{Binding MediaNoteVisibility}"
+                                           TextWrapping="Wrap" Opacity="0.85"
+                                           FontSize="13" Margin="0,0,0,4"
+                                           Tapped="Media_Tap"/>
+                                <Grid Visibility="{Binding PictureVisibility}"
+                                      Margin="0,0,0,4" HorizontalAlignment="Left"
+                                      Tapped="Media_Tap" DoubleTapped="Media_DoubleTap">
+                                    <Image Source="{Binding Picture}"
+                                           MaxWidth="260" MaxHeight="260"
+                                           Stretch="Uniform"/>
+
+                                    <!-- Marks a still as a video. Without it a
+                                         preview is indistinguishable from a photo,
+                                         and the difference decides what a tap
+                                         does. -->
+                                    <Grid Visibility="{Binding PlayMarkVisibility}"
+                                          Width="52" Height="52"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center">
+                                        <Ellipse Fill="#A0000000"/>
+                                        <Path Fill="White" Margin="20,16,0,0"
+                                              Data="M0,0 L16,10 L0,20 Z"/>
+                                    </Grid>
+                                </Grid>
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                                           Visibility="{Binding TextVisibility}"/>
+                                <TextBlock Text="{Binding Time}" FontSize="11" Opacity="0.5"
+                                           HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <StackPanel Grid.Row="3">
+            <!-- Standing above the box rather than in it: a reply that is not
+                 visible is a reply the user forgets is armed, and the next message
+                 goes somewhere they did not intend. -->
+            <Border x:Name="ReplyBar" Visibility="Collapsed" Margin="0,8,0,0"
+                    Padding="8,4,4,4" Background="{ThemeResource PhoneChromeBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="replying to" FontSize="11" Opacity="0.6"/>
+                        <TextBlock x:Name="ReplyText" TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis" FontSize="13"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
+                            FontSize="14" Padding="8,2,8,2" MinWidth="0"
+                            BorderThickness="0" Click="CancelReply_Click"/>
+                </Grid>
+            </Border>
+
+            <TextBox x:Name="ComposeBox" TextWrapping="NoWrap" Margin="0,8,0,0"
+                     KeyDown="Compose_KeyDown" PlaceholderText="message"/>
+        </StackPanel>
+        <!--
+          Picking a chat to forward to.
+
+          A full page would mean leaving the conversation and finding the way back
+          to it; this is one decision, so it is taken in place and dismissed either
+          way. Spanning every row so nothing behind it can be tapped by accident.
+        -->
+        <Border x:Name="ForwardPanel" Grid.RowSpan="4" Visibility="Collapsed"
+                Background="{ThemeResource PhoneBackgroundBrush}">
+            <Grid Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="forward to" FontSize="20" Margin="0,0,0,8"/>
+
+                <ListView Grid.Row="1" x:Name="ForwardList" IsItemClickEnabled="True"
+                          SelectionMode="None" ItemClick="ForwardTarget_Click">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Title}" TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       Margin="0,10,0,10"/>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <Button Grid.Row="2" Content="cancel" HorizontalAlignment="Stretch"
+                        Margin="0,8,0,0" Click="CancelForward_Click"/>
+            </Grid>
+        </Border>
+
+        <!--
+          The in-app banner.
+
+          Windows Phone does not show an app its own toast while that app is on
+          screen, and the foreground is the only case this build has - so the
+          notification the user actually sees has to be drawn here. Last in the grid
+          and spanning every row, so it paints over what is underneath.
+        -->
+        <Border x:Name="BannerPanel" Grid.RowSpan="4" Visibility="Collapsed"
+                VerticalAlignment="Top" Padding="12,10,12,10"
+                Background="{ThemeResource PhoneAccentBrush}">
+            <StackPanel>
+                <TextBlock x:Name="BannerTitle" Foreground="White" TextWrapping="NoWrap"
+                           FontSize="18"/>
+                <TextBlock x:Name="BannerBody" Foreground="White" TextWrapping="Wrap"
+                           FontSize="14" Opacity="0.9"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+    <!--
+      Send lives on the app bar rather than beside the box.
+
+      An ordinary button next to the text box cannot be tapped while the keyboard is
+      up: the tap dismisses the keyboard, the page re-lays out, and the button is no
+      longer under the finger - so the first press does nothing and the second works.
+      The app bar sits above the keyboard and receives the tap directly, which avoids
+      the problem instead of compensating for it.
+    -->
+    <Page.BottomAppBar>
+        <CommandBar>
+            <AppBarButton x:Name="AttachButton" Icon="Attach" Label="attach"
+                          Click="Attach_Click"/>
+            <!-- Only for one-to-one chats: there is no group call to place. -->
+            <AppBarButton x:Name="CallButton" Icon="Phone" Label="call"
+                          Visibility="Collapsed" Click="Call_Click"/>
+            <AppBarButton x:Name="SendButton" Icon="Send" Label="send" Click="Send_Click"/>
+            <AppBarButton Icon="Refresh" Label="refresh" Click="Refresh_Click"/>
+        </CommandBar>
+    </Page.BottomAppBar>
+</Page>

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What runs when the app does not.
+
+  A Windows Runtime Component rather than a plain library, and rather than a class
+  in the app itself. On Windows Phone 8.1 a background task is activated by the
+  system into its own host process, and the only way it can find the class is
+  through a winmd. Declaring the task in the app's own assembly and pointing the
+  manifest at it with an Executable attribute is the Windows 10 in-process model;
+  on 8.1 the package will not register at all.
+
+  That constraint is why the shared sources below are linked rather than
+  referenced. The component is a separate assembly with its own copy of the
+  session file reader, the settings and the notification policy - the same source,
+  compiled twice, so the app and the task can never disagree about what has
+  already been announced.
+
+  Everything a winmd exports must be WinRT-legal and must sit in a namespace that
+  matches the assembly name. Only the two task classes do; everything else here,
+  linked sources included, is internal and so stays off the exported surface.
+-->
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{9C4D2E71-5A83-4F16-B0D7-3E82A19C6F45}</ProjectGuid>
+    <OutputType>winmdobj</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>LumigramPlus.Tasks</RootNamespace>
+    <AssemblyName>LumigramPlus.Tasks</AssemblyName>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <TargetPlatformIdentifier>WindowsPhoneApp</TargetPlatformIdentifier>
+    <TargetPlatformVersion>8.1</TargetPlatformVersion>
+    <MinimumVisualStudioVersion>12</MinimumVisualStudioVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeGuids>{76F1466A-8B6D-4E39-A767-685A06062A39};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_PHONE_APP</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE;NETFX_CORE;WINDOWS_PHONE_APP</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|ARM'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\ARM\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_PHONE_APP</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>ARM</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|ARM'">
+    <OutputPath>bin\ARM\Release\</OutputPath>
+    <DefineConstants>TRACE;NETFX_CORE;WINDOWS_PHONE_APP</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>ARM</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <DebugSymbols>true</DebugSymbols>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;NETFX_CORE;WINDOWS_PHONE_APP</DefineConstants>
+    <DebugType>full</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE;NETFX_CORE;WINDOWS_PHONE_APP</DefineConstants>
+    <Optimize>true</Optimize>
+    <DebugType>pdbonly</DebugType>
+    <PlatformTarget>x86</PlatformTarget>
+    <ErrorReport>prompt</ErrorReport>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="BackgroundCheck.cs" />
+    <Compile Include="NotificationTask.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      The same sources the app compiles. Linked rather than duplicated: the seen
+      message map, the mute rules and the toast format have to be identical in both
+      processes or the two will announce the same message twice.
+    -->
+    <Compile Include="..\Secrets.cs">
+      <Link>Shared\Secrets.cs</Link>
+    </Compile>
+    <Compile Include="..\Shared\PhoneTransport.cs">
+      <Link>Shared\PhoneTransport.cs</Link>
+    </Compile>
+    <Compile Include="..\Shared\PhoneCrypto.cs">
+      <Link>Shared\PhoneCrypto.cs</Link>
+    </Compile>
+    <Compile Include="..\App\Platform\SessionStore.cs">
+      <Link>Shared\SessionStore.cs</Link>
+    </Compile>
+    <Compile Include="..\App\Platform\AppSettings.cs">
+      <Link>Shared\AppSettings.cs</Link>
+    </Compile>
+    <Compile Include="..\App\Platform\SeenStore.cs">
+      <Link>Shared\SeenStore.cs</Link>
+    </Compile>
+    <Compile Include="..\App\Platform\BackgroundLog.cs">
+      <Link>Shared\BackgroundLog.cs</Link>
+    </Compile>
+    <Compile Include="..\App\Platform\Notifications.cs">
+      <Link>Shared\Notifications.cs</Link>
+    </Compile>
+    <Compile Include="..\App\Platform\LiveTile.cs">
+      <Link>Shared\LiveTile.cs</Link>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Core\LumigramPlus.Core.csproj">
+      <Project>{E3F1A7C2-4B69-4D85-A0F3-27C6B9E48D51}</Project>
+      <Name>LumigramPlus.Core</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <PropertyGroup Condition=" '$(VisualStudioVersion)' == '' or '$(VisualStudioVersion)' &lt; '12.0' ">
+    <VisualStudioVersion>12.0</VisualStudioVersion>
+  </PropertyGroup>
+  <Import Project="$(MSBuildExtensionsPath)\Microsoft\WindowsXaml\v$(VisualStudioVersion)\Microsoft.Windows.UI.Xaml.CSharp.targets" />
+</Project>

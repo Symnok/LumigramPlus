@@ -1,0 +1,87 @@
+<Page
+    x:Class="LumigramPlus.App.CallPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid Margin="24,32,24,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="LUMIGRAM+" FontSize="14" Opacity="0.6"/>
+            <TextBlock x:Name="PeerTitle" Text="" FontSize="34" TextWrapping="Wrap"/>
+            <TextBlock x:Name="StateText" Text="" FontSize="18" Opacity="0.8"
+                       TextWrapping="Wrap" Margin="0,8,0,0"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+            <!--
+              Said plainly rather than hidden. The signalling is finished and the
+              media is not, so a connected call is silent - and a user who is not
+              told that will report a bug that is not one.
+            -->
+            <TextBlock x:Name="NoteText" TextWrapping="Wrap" Opacity="0.55" FontSize="13"
+                       Text="Two-way audio. The microphone starts once the call connects."/>
+
+            <TextBlock x:Name="DetailText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="12" FontFamily="Consolas" Margin="0,20,0,0"/>
+        </StackPanel>
+
+        <!--
+          Playback lives here rather than in code alone: a MediaElement has to be in
+          the visual tree to play at all. It has no controls and nothing to show, so
+          it takes no space.
+        -->
+        <MediaElement x:Name="Speaker" AutoPlay="True" AudioCategory="Communications"
+                      Width="0" Height="0"/>
+
+        <!--
+          Round, coloured, and side by side, the way every phone does it. A call is
+          answered and ended by feel rather than by reading, and a row of identical
+          rectangles is the one arrangement that cannot be used without looking.
+        -->
+        <Grid Grid.Row="2" HorizontalAlignment="Center" Margin="0,0,0,24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="MuteButton" Grid.Column="0" Visibility="Collapsed"
+                  Width="72" Height="72" Margin="0,0,28,0" Tapped="Mute_Tapped">
+                <Ellipse x:Name="MuteCircle" Fill="#40FFFFFF"/>
+                <TextBlock x:Name="MuteGlyph" Text="&#xE1D6;" FontFamily="Segoe UI Symbol"
+                           FontSize="30" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Grid x:Name="AnswerButton" Grid.Column="1" Visibility="Collapsed"
+                  Width="96" Height="96" Margin="0,0,28,0" Tapped="Answer_Tapped">
+                <Ellipse Fill="#FF2FA84F"/>
+                <TextBlock Text="&#xE13C;" FontFamily="Segoe UI Symbol"
+                           FontSize="40" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Grid x:Name="HangUpButton" Grid.Column="2"
+                  Width="96" Height="96" Tapped="HangUp_Tapped">
+                <Ellipse Fill="#FFD64541"/>
+                <!-- The same handset, turned over: the universal sign for putting
+                     the phone down, and the only thing distinguishing it at a
+                     glance besides the colour. -->
+                <TextBlock x:Name="HangUpGlyph" Text="&#xE13C;" FontFamily="Segoe UI Symbol"
+                           FontSize="40" Foreground="White"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           RenderTransformOrigin="0.5,0.5">
+                    <TextBlock.RenderTransform>
+                        <RotateTransform Angle="135"/>
+                    </TextBlock.RenderTransform>
+                </TextBlock>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

@@ -1,0 +1,92 @@
+<Page
+    x:Class="LumigramPlus.App.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid Margin="16,24,16,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="LUMIGRAM+" FontSize="14" Opacity="0.6"/>
+            <TextBlock Text="settings" FontSize="30"/>
+        </StackPanel>
+
+        <!--
+          The settings outgrew the screen the moment background notifications
+          arrived, and a StackPanel in a star row does not scroll - it is simply
+          given the height it asks for and the rest is off the bottom of the phone.
+
+          The margin moves onto the panel so the scrollbar sits against the edge of
+          the screen rather than sixteen pixels inside it.
+        -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      VerticalScrollMode="Enabled" HorizontalScrollMode="Disabled"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Margin="0,0,-16,-16" Padding="0,0,16,16">
+        <StackPanel>
+            <ToggleSwitch x:Name="AutoLoadSwitch" Header="Download photos automatically"
+                          OnContent="on" OffContent="off"
+                          Toggled="AutoLoad_Toggled"/>
+            <TextBlock Text="Off means photos are fetched only when tapped, which is worth having on a metered connection."
+                       TextWrapping="Wrap" Opacity="0.7" FontSize="13" Margin="0,4,0,0"/>
+
+            <ToggleSwitch x:Name="NotificationsSwitch" Header="Notifications"
+                          OnContent="on" OffContent="off"
+                          Toggled="Notifications_Toggled" Margin="0,16,0,0"/>
+            <TextBlock Text="Announces messages while the app is open. Muted chats never notify, and neither does the chat you are reading."
+                       TextWrapping="Wrap" Opacity="0.7" FontSize="13" Margin="0,4,0,0"/>
+
+            <ToggleSwitch x:Name="SoundSwitch" Header="Notification sound"
+                          OnContent="on" OffContent="off"
+                          Toggled="Sound_Toggled" Margin="0,16,0,0"/>
+
+            <TextBlock Text="Notifications in background" Margin="0,20,0,4"/>
+            <ComboBox x:Name="BackgroundBox" HorizontalAlignment="Stretch"
+                      SelectionChanged="Background_Changed">
+                <ComboBoxItem Content="off"/>
+                <ComboBoxItem Content="every 15 minutes"/>
+            </ComboBox>
+            <TextBlock x:Name="BackgroundText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="13" Margin="0,4,0,0"/>
+
+            <Button x:Name="CheckNowButton" Content="check for messages now"
+                    HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                    Click="CheckNow_Click"/>
+            <TextBlock x:Name="LastRunText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="13" Margin="0,4,0,0"/>
+
+            <Button x:Name="BenchmarkButton" Content="voice codec benchmark"
+                    HorizontalAlignment="Stretch" Margin="0,20,0,0"
+                    Click="Benchmark_Click"/>
+            <TextBlock x:Name="BenchmarkText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="12" FontFamily="Consolas" Margin="0,4,0,0"/>
+
+            <ToggleSwitch x:Name="RawMicSwitch" Header="Raw microphone"
+                          OnContent="on" OffContent="off"
+                          Toggled="RawMic_Toggled" Margin="0,20,0,0"/>
+            <TextBlock Text="Off uses the platform's voice processing - echo cancellation and noise suppression. On takes the microphone untouched. Takes effect on the next call."
+                       TextWrapping="Wrap" Opacity="0.7" FontSize="13" Margin="0,4,0,0"/>
+
+            <TextBlock x:Name="CallText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="12" FontFamily="Consolas" Margin="0,20,0,0"/>
+
+            <TextBlock x:Name="ToastText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="13" Margin="0,4,0,0"/>
+
+            <TextBlock x:Name="AccountText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="13" Margin="0,28,0,4"/>
+
+            <Button Content="sign out" Click="SignOut_Click"
+                    HorizontalAlignment="Stretch"/>
+            <TextBlock Text="Forgets the authorisation on this phone. The session stays listed under Devices in Telegram until removed there."
+                       TextWrapping="Wrap" Opacity="0.55" FontSize="12" Margin="0,4,0,12"/>
+
+            <Button Content="exit" Click="Exit_Click" HorizontalAlignment="Stretch"/>
+        </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

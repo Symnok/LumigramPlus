@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Desktop test head for the protocol core.
+
+  Core/ is written for WP8.1 Silverlight, which has no System.Numerics and no
+  System.Security.Cryptography. This project links the same source files and
+  runs them on the desktop, where iteration is seconds instead of an emulator
+  deploy - and where System.Numerics *is* available, so BigInt can be checked
+  against the framework's BigInteger by differential testing.
+
+  Nothing in Core may reference this project or anything it pulls in.
+-->
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{6B1E52A0-6C4F-4E0B-9C2D-1A7F5D3E8B41}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Lumigram.Harness</RootNamespace>
+    <AssemblyName>Lumigram.Harness</AssemblyName>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Concentus">
+      <HintPath>..\Lib\Concentus.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <!-- Test-only: the reference implementation BigInt is checked against.
+         Core itself must never use this - the phone does not have it. -->
+    <Reference Include="System.Numerics" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="BigIntTests.cs" />
+    <Compile Include="CryptoTests.cs" />
+    <Compile Include="TlTests.cs" />
+    <Compile Include="CallTests.cs" />
+    <Compile Include="VoipTests.cs" />
+    <Compile Include="JitterTests.cs" />
+    <Compile Include="LinkTests.cs" />
+    <Compile Include="DesktopCrypto.cs" />
+    <Compile Include="TcpTransport.cs" />
+    <Compile Include="HandshakeCommand.cs" />
+    <Compile Include="ApiCommand.cs" />
+    <Compile Include="ClockSkewCommand.cs" />
+    <Compile Include="VoiceCommand.cs" />
+    <Compile Include="LoginCommand.cs" />
+    <Compile Include="SessionStore.cs" />
+    <Compile Include="MessageCommand.cs" />
+    <Compile Include="ListenCommand.cs" />
+    <Compile Include="QrTests.cs" />
+    <Compile Include="QrLoginCommand.cs" />
+    <Compile Include="MediaCommand.cs" />
+    <Compile Include="ResolveCommand.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Shared protocol core. Keep in sync with the phone project. -->
+    <Compile Include="..\Core\Crypto\BigInt.cs">
+      <Link>Core\Crypto\BigInt.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Crypto\ICrypto.cs">
+      <Link>Core\Crypto\ICrypto.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Crypto\Aes256.cs">
+      <Link>Core\Crypto\Aes256.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Crypto\AesIge.cs">
+      <Link>Core\Crypto\AesIge.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Tl\TlWriter.cs">
+      <Link>Core\Tl\TlWriter.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Tl\TlReader.cs">
+      <Link>Core\Tl\TlReader.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Tl\TlConstructors.cs">
+      <Link>Core\Tl\TlConstructors.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\RsaKey.cs">
+      <Link>Core\Mtproto\RsaKey.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\TelegramServers.cs">
+      <Link>Core\Mtproto\TelegramServers.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\ITransport.cs">
+      <Link>Core\Mtproto\ITransport.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\PqFactorization.cs">
+      <Link>Core\Mtproto\PqFactorization.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\DhValidation.cs">
+      <Link>Core\Mtproto\DhValidation.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Calls.cs">
+      <Link>Core\Mtproto\Calls.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Voip\VoipPacket.cs">
+      <Link>Core\Voip\VoipPacket.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Voip\JitterBuffer.cs">
+      <Link>Core\Voip\JitterBuffer.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Voip\VoipCrypto.cs">
+      <Link>Core\Voip\VoipCrypto.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\AuthKeyHandshake.cs">
+      <Link>Core\Mtproto\AuthKeyHandshake.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\MtprotoSession.cs">
+      <Link>Core\Mtproto\MtprotoSession.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\MtprotoClient.cs">
+      <Link>Core\Mtproto\MtprotoClient.cs</Link>
+    </Compile>
+    <Compile Include="..\Secrets.cs">
+      <Link>Secrets.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Crypto\Pbkdf2.cs">
+      <Link>Core\Crypto\Pbkdf2.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Srp.cs">
+      <Link>Core\Mtproto\Srp.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Tl\Inflate.cs">
+      <Link>Core\Tl\Inflate.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Tl\Links.cs">
+      <Link>Core\Tl\Links.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Messages.cs">
+      <Link>Core\Mtproto\Messages.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Tl\TlSchema.g.cs">
+      <Link>Core\Tl\TlSchema.g.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Tl\TlDom.cs">
+      <Link>Core\Tl\TlDom.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\UpdateReader.cs">
+      <Link>Core\Mtproto\UpdateReader.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Crypto\Sha512.cs">
+      <Link>Core\Crypto\Sha512.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Qr\QrCode.cs">
+      <Link>Core\Qr\QrCode.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Audio\OggOpus.cs">
+      <Link>Core\Audio\OggOpus.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Audio\OggWriter.cs">
+      <Link>Core\Audio\OggWriter.cs</Link>
+    </Compile>
+    <Compile Include="..\Shared\VoiceEncoder.cs">
+      <Link>Core\Audio\VoiceEncoder.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\QrLogin.cs">
+      <Link>Core\Mtproto\QrLogin.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Media.cs">
+      <Link>Core\Mtproto\Media.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Upload.cs">
+      <Link>Core\Mtproto\Upload.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Contacts.cs">
+      <Link>Core\Mtproto\Contacts.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Peers.cs">
+      <Link>Core\Mtproto\Peers.cs</Link>
+    </Compile>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
