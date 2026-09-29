@@ -313,6 +313,24 @@ namespace Lumigram.Tl
         public const uint AuthExportLoginToken = 0xb7e085fe;
         public const uint AuthImportLoginToken = 0x95ac5ce4;
 
+        // --- reaching another datacenter ---------------------------------
+        //
+        // An account's files are not all in one place: a photo lives on the
+        // datacenter the phone that sent it was nearest to, and asking the wrong
+        // one answers FILE_MIGRATE_n. A second connection to n needs its own
+        // authorisation, and these are how the one already held is lent to it -
+        // the key on the new datacenter is a different key, so nothing else makes
+        // it that account's connection.
+
+        // auth.exportAuthorization#e5bfffcd dc_id:int = auth.ExportedAuthorization
+        public const uint AuthExportAuthorization = 0xe5bfffcd;
+
+        // auth.exportedAuthorization#b434e2b8 id:long bytes:bytes
+        public const uint AuthExportedAuthorization = 0xb434e2b8;
+
+        // auth.importAuthorization#a57a7dad id:long bytes:bytes = auth.Authorization
+        public const uint AuthImportAuthorization = 0xa57a7dad;
+
         public const uint AuthLoginToken = 0x629f1980;          // expires:int token:bytes
         public const uint AuthLoginTokenMigrateTo = 0x068e9916; // dc_id:int token:bytes
         public const uint AuthLoginTokenSuccess = 0x390d5c5e;   // authorization:auth.Authorization

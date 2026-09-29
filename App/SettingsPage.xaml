@@ -71,6 +71,18 @@
             <TextBlock x:Name="ToastText" Text="" TextWrapping="Wrap" Opacity="0.7"
                        FontSize="13" Margin="0,4,0,0"/>
 
+            <TextBlock Text="Downloaded files" Margin="0,28,0,4"/>
+            <TextBlock x:Name="CacheText" Text="" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="13"/>
+
+            <!-- Above the sign-out and exit pair rather than among them: those two
+                 end something, and this one only reclaims room. -->
+            <Button x:Name="ClearCacheButton" Content="delete downloaded files"
+                    HorizontalAlignment="Stretch" Margin="0,8,0,0"
+                    Click="ClearCache_Click"/>
+            <TextBlock Text="Photos, videos and files already fetched, and the chat pictures. Every one of them can be fetched again, nothing is removed from Telegram, and the sign-in is untouched."
+                       TextWrapping="Wrap" Opacity="0.55" FontSize="12" Margin="0,4,0,0"/>
+
             <TextBlock x:Name="AccountText" Text="" TextWrapping="Wrap" Opacity="0.7"
                        FontSize="13" Margin="0,28,0,4"/>
 

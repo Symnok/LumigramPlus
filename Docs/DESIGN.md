@@ -140,6 +140,37 @@ already in the layer-228 table. What it needed was the `forum` bit, flags.30 of
 it a supergroup opens as a list of topics, and without it as one interleaved
 stream where everything sent back lands in General.
 
+## Files are not all on one datacenter
+
+An account is signed in on one datacenter, but its files are spread over all of
+them: a photo is stored where the phone that sent it was, so a chat list of
+people in three countries refers to files on three datacenters. Asking the
+signed-in one for a file it does not hold answers `FILE_MIGRATE_4`, which reads
+like an error and is an address.
+
+This surfaced as "some pictures unavailable - FILE_MIGRATE_4" on the chat list,
+and it is not a rare case: it is every contact who joined from abroad.
+
+Reaching datacenter 4 is a whole second connection - its own handshake, its own
+auth key - and that key is a stranger's until the account is put on it:
+
+    auth.exportAuthorization(4)     on the datacenter already signed in
+    auth.importAuthorization(id, bytes)  on the new one
+
+The credential is short-lived and single-use, so it is fetched per datacenter as
+that datacenter is first needed. `FileDcPool` keeps the resulting connections for
+as long as the app runs, because the handshake costs seconds on a phone and a
+chat list is dozens of pictures from a handful of datacenters - paid once each,
+then not again. They are not stored across launches: each is a live credential
+for the account, and writing three more of them to disk to save a few seconds
+once per launch is not a trade worth making silently.
+
+The file's own `dc_id` is treated as a hint and never as a decision. It saves a
+round trip to the wrong place, but the server's answer settles it - so the
+signed-in connection is always tried first unless a connection to that
+datacenter is already open. Building one on the strength of the hint alone would
+mean paying for a handshake to arrive back where it started.
+
 ## State
 
 Done, and verified against live Telegram:

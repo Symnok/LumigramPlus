@@ -24,6 +24,16 @@ namespace LumigramPlus.App
 
         public long PhotoId { get; set; }
 
+        /// <summary>
+        /// Which datacenter holds the picture.
+        ///
+        /// A hint, not an instruction: it saves a round trip to the wrong
+        /// datacenter, and the server's answer settles it either way. Carried
+        /// because without it every picture stored away from home costs one refused
+        /// request before it can be found.
+        /// </summary>
+        public int PhotoDcId { get; set; }
+
         /// <summary>Newest message already read, so a chat can open where it left off.</summary>
         public int ReadInboxMaxId { get; set; }
 
@@ -829,6 +839,7 @@ namespace LumigramPlus.App
                 UnreadCount = d.UnreadCount,
                 Muted = d.IsMuted(now),
                 PhotoId = d.PhotoId,
+                PhotoDcId = d.PhotoDcId,
                 ReadInboxMaxId = d.ReadInboxMaxId,
                 Archived = d.Archived,
                 IsForum = d.IsForum,
@@ -911,7 +922,7 @@ namespace LumigramPlus.App
                 try
                 {
                     Windows.UI.Xaml.Media.Imaging.BitmapImage image =
-                        await AvatarCache.GetAsync(client, chat);
+                        await AvatarCache.GetAsync(chat);
 
                     if (image != null) chat.Avatar = image;
                 }

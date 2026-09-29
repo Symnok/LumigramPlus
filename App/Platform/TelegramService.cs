@@ -272,6 +272,12 @@ namespace LumigramPlus.App
 
         public static void Disconnect()
         {
+            // The extra connections opened to reach files on other datacenters go
+            // with this one. They are sockets like any other, and WinRT closes them
+            // while the app is suspended - keeping them past that point means the
+            // next picture fails on a connection that only looks alive.
+            FileDcPool.Reset();
+
             MtprotoClient client;
             lock (Gate)
             {

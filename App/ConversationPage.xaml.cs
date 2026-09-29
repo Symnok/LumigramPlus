@@ -704,9 +704,7 @@ namespace LumigramPlus.App
         {
             try
             {
-                MtprotoClient client = await TelegramService.ConnectAsync();
-
-                Uri uri = await MediaCache.GetThumbAsync(client, item.Media);
+                Uri uri = await MediaCache.GetThumbAsync(item.Media);
                 if (uri == null) return;
 
                 item.Picture = new Windows.UI.Xaml.Media.Imaging.BitmapImage(uri);
@@ -786,9 +784,7 @@ namespace LumigramPlus.App
 
             try
             {
-                MtprotoClient client = await TelegramService.ConnectAsync();
-
-                Uri uri = await MediaCache.GetAsync(client, item.Media,
+                Uri uri = await MediaCache.GetAsync(item.Media,
                     delegate (long got, long total)
                     {
                         if (total <= 0) return;

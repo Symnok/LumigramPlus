@@ -40,6 +40,35 @@ namespace Lumigram.Mtproto
                     ? seconds : 0;
             }
         }
+
+        /// <summary>
+        /// The datacenter the server says to ask instead, or 0 if it did not say.
+        ///
+        /// Not a refusal either. Telegram splits an account's data across
+        /// datacenters and answers a request aimed at the wrong one with
+        /// FILE_MIGRATE_4, USER_MIGRATE_2 and so on - the number is the answer, not
+        /// an error code. A file uploaded from a phone in another part of the world
+        /// lives where that phone was, so this arrives on perfectly ordinary
+        /// pictures and the only wrong response is to give up on them.
+        ///
+        /// Matched on the infix rather than on each prefix in turn: the family has
+        /// five members today and the shape has never changed.
+        /// </summary>
+        public int MigrateDatacenter
+        {
+            get
+            {
+                const string infix = "_MIGRATE_";
+
+                if (ErrorType == null) return 0;
+
+                int at = ErrorType.IndexOf(infix, StringComparison.Ordinal);
+                if (at < 0) return 0;
+
+                int dc;
+                return int.TryParse(ErrorType.Substring(at + infix.Length), out dc) ? dc : 0;
+            }
+        }
     }
 
     /// <summary>

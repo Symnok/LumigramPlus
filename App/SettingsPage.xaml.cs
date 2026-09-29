@@ -53,6 +53,86 @@ namespace LumigramPlus.App
             AccountText.Text = TelegramService.Session != null
                 ? "Signed in. Authorisation stored for " + TelegramService.Session.Host + "."
                 : "Not signed in.";
+
+            ShowCacheSize();
+        }
+
+        /// <summary>
+        /// Puts the size of the downloaded files on screen.
+        ///
+        /// Every file is asked for its size one at a time, which on a well-used
+        /// cache is hundreds of calls - so the page is drawn first and this fills in
+        /// after, rather than the settings taking a second to open.
+        /// </summary>
+        private async void ShowCacheSize()
+        {
+            CacheText.Text = "Measuring...";
+
+            try
+            {
+                CacheSize size = await CacheStore.MeasureAsync();
+
+                CacheText.Text = size.Files == 0
+                    ? "Nothing downloaded yet."
+                    : size.Files + " file" + (size.Files == 1 ? "" : "s") + ", " +
+                      CacheStore.Describe(size.Bytes) + ".";
+
+                ClearCacheButton.IsEnabled = size.Files > 0;
+            }
+            catch (Exception)
+            {
+                // Not worth a message of its own: the button still works, and
+                // pressing it reports what it actually did.
+                CacheText.Text = "";
+                ClearCacheButton.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// Empties the caches, once the user has said so.
+        ///
+        /// Confirmed first because it cannot be undone in any useful sense - the
+        /// files come back only by downloading them again, which on a phone
+        /// connection is the cost this is being asked about.
+        /// </summary>
+        private async void ClearCache_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Windows.UI.Popups.MessageDialog(
+                "Delete the downloaded photos, videos, files and chat pictures? " +
+                "They will be downloaded again when they are next looked at.",
+                "Delete downloaded files");
+
+            dialog.Commands.Add(new Windows.UI.Popups.UICommand("yes"));
+            dialog.Commands.Add(new Windows.UI.Popups.UICommand("cancel"));
+            dialog.DefaultCommandIndex = 1;
+            dialog.CancelCommandIndex = 1;
+
+            Windows.UI.Popups.IUICommand chosen = await dialog.ShowAsync();
+            if (chosen == null || chosen.Label != "yes") return;
+
+            ClearCacheButton.IsEnabled = false;
+            CacheText.Text = "Deleting...";
+
+            try
+            {
+                CacheSize freed = await CacheStore.ClearAsync();
+
+                // The files kept are the ones something else had open, and saying so
+                // is the difference between a cache that did not empty and one that
+                // could not - the second is fixed by trying again in a moment.
+                CacheText.Text = "Freed " + CacheStore.Describe(freed.Bytes) + "." +
+                    (freed.Kept > 0
+                        ? " " + freed.Kept + " file" + (freed.Kept == 1 ? " was" : "s were") +
+                          " in use and kept."
+                        : "");
+
+                ClearCacheButton.IsEnabled = freed.Kept > 0;
+            }
+            catch (Exception ex)
+            {
+                CacheText.Text = "Could not delete: " + ex.Message;
+                ClearCacheButton.IsEnabled = true;
+            }
         }
 
         private async void SignOut_Click(object sender, RoutedEventArgs e)

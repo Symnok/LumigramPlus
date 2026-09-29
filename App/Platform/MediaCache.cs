@@ -11,21 +11,27 @@ namespace LumigramPlus.App
     ///
     /// Keyed by the id Telegram gave the file, so the same picture is downloaded
     /// once however many times it is looked at, and survives restarts. Nothing is
-    /// ever evicted yet - worth adding before this is used in anger, but a cache
-    /// that grows is a better problem than a photo that downloads on every scroll.
+    /// evicted automatically - a cache that grows is a better problem than a photo
+    /// that downloads on every scroll - so emptying it is a decision the user takes
+    /// in the settings, through CacheStore.
     ///
     /// Files are handed on as ms-appdata paths rather than decoded here, so XAML
     /// loads them itself, off the UI thread.
     /// </summary>
     internal static class MediaCache
     {
-        private const string Folder = "media";
+        /// <summary>Public so CacheStore can name this folder rather than spell it.</summary>
+        public const string Folder = "media";
 
         /// <summary>
         /// Fetches an attachment if it is not already here, and returns the URI to
         /// show it from. Null when it could not be fetched.
+        ///
+        /// Takes no connection. Which one to use is not the caller's to know: it
+        /// depends on where the file turns out to live, which only the server can
+        /// say. FileDcPool answers that.
         /// </summary>
-        public static async Task<Uri> GetAsync(MtprotoClient client, MediaInfo info,
+        public static async Task<Uri> GetAsync(MediaInfo info,
                                                Action<long, long> progress = null)
         {
             if (info == null || info.Id == 0) return null;
@@ -47,36 +53,63 @@ namespace LumigramPlus.App
                     // Not cached; fetch it below.
                 }
 
-                StorageFile file = await folder.CreateFileAsync(
-                    name, CreationCollisionOption.ReplaceExisting);
-
-                // Written as it arrives rather than assembled first.
+                // Through the pool rather than on the connection handed in: the
+                // file may live on another datacenter, and the answer to that is a
+                // second connection rather than a failure. See FileDcPool.
                 //
-                // A photo fits in memory and a video does not: holding a fifty
-                // megabyte file whole, on a phone with half a gigabyte to share
-                // between everything, is how an app gets killed mid-download. Each
-                // chunk goes straight to disk, so the memory cost is one chunk
-                // whatever the size of the file.
-                long written = 0;
+                // The file is created inside the attempt, not before it, because a
+                // retry elsewhere has to start from the first byte - reusing a
+                // part-written file would splice two downloads together.
+                StorageFile file = null;
+                long written;
 
-                using (System.IO.Stream stream = await file.OpenStreamForWriteAsync())
+                try
                 {
-                    await Media.DownloadAsync(client, info,
-                        delegate (byte[] chunk)
+                    written = await FileDcPool.RunAsync(info.DcId,
+                        async delegate (MtprotoClient dc)
                         {
-                            stream.Write(chunk, 0, chunk.Length);
-                            written += chunk.Length;
-                        },
-                        progress, TelegramService.Info);
+                            file = await folder.CreateFileAsync(
+                                name, CreationCollisionOption.ReplaceExisting);
+
+                            // Written as it arrives rather than assembled first.
+                            //
+                            // A photo fits in memory and a video does not: holding
+                            // a fifty megabyte file whole, on a phone with half a
+                            // gigabyte to share between everything, is how an app
+                            // gets killed mid-download. Each chunk goes straight to
+                            // disk, so the memory cost is one chunk whatever the
+                            // size of the file.
+                            long count = 0;
+
+                            using (System.IO.Stream stream = await file.OpenStreamForWriteAsync())
+                            {
+                                await Media.DownloadAsync(dc, info,
+                                    delegate (byte[] chunk)
+                                    {
+                                        stream.Write(chunk, 0, chunk.Length);
+                                        count += chunk.Length;
+                                    },
+                                    progress, TelegramService.Info);
+                            }
+
+                            return count;
+                        });
+                }
+                catch (Exception)
+                {
+                    // A part-written file is worse than none: it is indistinguishable
+                    // from a cached one, so the picture would be broken from here on
+                    // and never fetched again. This is the path a datacenter move
+                    // takes when even the second attempt fails.
+                    await DiscardAsync(file);
+                    throw;
                 }
 
                 if (written == 0)
                 {
                     // Nothing came back; leaving an empty file behind would look
                     // cached and never be fetched again.
-                    try { await file.DeleteAsync(); }
-                    catch (Exception) { }
-
+                    await DiscardAsync(file);
                     return null;
                 }
 
@@ -95,7 +128,7 @@ namespace LumigramPlus.App
         /// asked for by a different size name. Cached under its own name so it does
         /// not collide with the file itself.
         /// </summary>
-        public static async Task<Uri> GetThumbAsync(MtprotoClient client, MediaInfo info)
+        public static async Task<Uri> GetThumbAsync(MediaInfo info)
         {
             if (info == null || info.Id == 0 || string.IsNullOrEmpty(info.ThumbSizeType))
                 return null;
@@ -127,8 +160,13 @@ namespace LumigramPlus.App
                     // Not cached yet.
                 }
 
-                byte[] bytes = await Media.DownloadLocationAsync(
-                    client, Media.BuildLocation(thumb), TelegramService.Info);
+                byte[] location = Media.BuildLocation(thumb);
+
+                byte[] bytes = await FileDcPool.RunAsync(info.DcId,
+                    delegate (MtprotoClient dc)
+                    {
+                        return Media.DownloadLocationAsync(dc, location, TelegramService.Info);
+                    });
 
                 if (bytes == null || bytes.Length == 0) return null;
 
@@ -142,6 +180,18 @@ namespace LumigramPlus.App
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Removes a file that was created for a download which then did not
+        /// finish, so the next look fetches it again instead of showing nothing.
+        /// </summary>
+        private static async Task DiscardAsync(StorageFile file)
+        {
+            if (file == null) return;
+
+            try { await file.DeleteAsync(); }
+            catch (Exception) { }
         }
 
         /// <summary>The cached file if there is one, without fetching anything.</summary>

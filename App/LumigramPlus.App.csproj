@@ -192,6 +192,8 @@
     <Compile Include="Platform\SessionStore.cs" />
     <Compile Include="Platform\TelegramService.cs" />
     <Compile Include="Platform\AvatarCache.cs" />
+    <Compile Include="Platform\CacheStore.cs" />
+    <Compile Include="Platform\FileDcPool.cs" />
     <Compile Include="Platform\MediaCache.cs" />
     <Compile Include="Platform\AppSettings.cs" />
     <Compile Include="Platform\LiveTile.cs" />
