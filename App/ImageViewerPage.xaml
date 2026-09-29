@@ -5,16 +5,34 @@
     Background="Black">
 
     <!--
-      A ScrollViewer with zoom enabled does the work: pinch, double-tap to zoom in
-      and again to zoom out, and panning once zoomed, all without a line of code.
-      Writing gesture handling by hand would be worse in every way.
+      The picture fits the screen first, and is zoomed up from there.
+
+      This used to be an Image straight inside the ScrollViewer, which does not do
+      that. A ScrollViewer offers its content unlimited room, so Stretch="Uniform"
+      had nothing to fit into and the Image was laid out at the bitmap's own pixel
+      size - several times the width of the screen for any photograph. It opened
+      deep inside the top-left corner of itself, and MinZoomFactor="1" meant it
+      could not be zoomed out far enough to see, only dragged around.
+
+      The fix is to give the content a size. Stage is set to the viewport, so at
+      zoom 1 the whole picture is on screen and there is nothing to scroll; zooming
+      in makes the content larger than the viewport, which is the point at which
+      panning starts to mean something.
+
+      Scrollbars are hidden rather than turned off. There is nothing to scroll until
+      the picture is zoomed, and once it is, two grey bars across a photograph are
+      not information anybody wants.
     -->
     <ScrollViewer x:Name="Zoomer"
                   ZoomMode="Enabled" MinZoomFactor="1" MaxZoomFactor="8"
-                  HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollMode="Auto" VerticalScrollMode="Auto">
-        <Image x:Name="Picture" Stretch="Uniform"/>
+                  HorizontalScrollBarVisibility="Hidden"
+                  VerticalScrollBarVisibility="Hidden"
+                  HorizontalScrollMode="Enabled" VerticalScrollMode="Enabled"
+                  SizeChanged="Zoomer_SizeChanged"
+                  DoubleTapped="Zoomer_DoubleTapped">
+        <Grid x:Name="Stage">
+            <Image x:Name="Picture" Stretch="Uniform"/>
+        </Grid>
     </ScrollViewer>
 
     <Page.BottomAppBar>
