@@ -141,6 +141,19 @@ namespace LumigramPlus.App
         }
 
         /// <summary>
+        /// Whether there is anything to copy.
+        ///
+        /// The same condition as showing the text at all, which includes an
+        /// attachment's caption - that is text too, and the only text a picture
+        /// message has. An id is not needed: copying never reaches the server, so
+        /// it works on a message still on its way out.
+        /// </summary>
+        public Visibility CopyVisibility
+        {
+            get { return TextVisibility; }
+        }
+
+        /// <summary>
         /// Whether there is a file behind this message.
         ///
         /// Plain text used to offer "save as", which was the whole menu at the time
@@ -224,6 +237,22 @@ namespace LumigramPlus.App
 
         private DialogItem _peer;
         private byte[] _inputPeer;
+
+        /// <summary>
+        /// The forum topic being read, or 0 for an ordinary chat.
+        ///
+        /// A topic is not a peer, so this does not go into _inputPeer: the peer is
+        /// still the whole forum, and the topic narrows what is asked of it. Every
+        /// use of it is a branch rather than a different value, which is why it is
+        /// kept beside the peer rather than folded into it.
+        /// </summary>
+        private int _topicId;
+
+        /// <summary>
+        /// The newest message already read here, whether "here" is a chat or one
+        /// topic of a forum.
+        /// </summary>
+        private int _readTo;
 
         public ConversationPage()
         {
@@ -340,12 +369,20 @@ namespace LumigramPlus.App
         {
             base.OnNavigatedTo(e);
 
-            _peer = e.Parameter as DialogItem;
+            // Two shapes, because an ordinary chat has nothing to say beyond which
+            // chat it is. Navigating with a bare DialogItem still means "all of it".
+            var request = e.Parameter as ConversationRequest;
+
+            _peer = request != null ? request.Peer : e.Parameter as DialogItem;
+            _topicId = request != null ? request.TopicId : 0;
+
             if (_peer == null)
             {
                 SetBusy(false, "No chat to open.");
                 return;
             }
+
+            _readTo = request != null ? request.ReadInboxMaxId : _peer.ReadInboxMaxId;
 
             // Messages arriving for the chat on screen must not announce themselves.
             Notifications.OpenPeerId = _peer.PeerId;
@@ -357,7 +394,11 @@ namespace LumigramPlus.App
 
             CollectRecordedVideo();
 
-            PeerTitle.Text = _peer.Title ?? "chat";
+            // The topic's name, not the forum's: the forum's is one tap back, and
+            // which thread this is is the thing that is not otherwise on screen.
+            PeerTitle.Text = _topicId != 0
+                ? (request.TopicTitle ?? "topic")
+                : (_peer.Title ?? "chat");
             _inputPeer = Messages.InputPeerFor(_peer.Kind, _peer.PeerId, _peer.AccessHash);
 
             Load();
@@ -371,8 +412,7 @@ namespace LumigramPlus.App
             {
                 MtprotoClient client = await TelegramService.ConnectAsync();
 
-                Messages.History history = await Messages.GetHistoryAsync(
-                    client, _inputPeer, HistoryCount, TelegramService.Info);
+                Messages.History history = await ReadHistoryAsync(client);
 
                 foreach (KeyValuePair<long, PeerInfo> pair in history.Senders)
                     _senders[pair.Key] = pair.Value;
@@ -398,6 +438,23 @@ namespace LumigramPlus.App
         }
 
         /// <summary>
+        /// The newest messages, from the whole chat or from one topic.
+        ///
+        /// getHistory cannot express a topic: the topic is not a peer, so asking for
+        /// the forum's history returns every thread at once. getReplies asks for the
+        /// thread hanging off one message, and a topic *is* that message.
+        /// </summary>
+        private async Task<Messages.History> ReadHistoryAsync(MtprotoClient client)
+        {
+            if (_topicId != 0)
+                return await Topics.GetHistoryAsync(client, _inputPeer, _topicId,
+                                                    HistoryCount, TelegramService.Info);
+
+            return await Messages.GetHistoryAsync(client, _inputPeer, HistoryCount,
+                                                  TelegramService.Info);
+        }
+
+        /// <summary>
         /// Tells the server the chat has been read.
         ///
         /// The unread count belongs to the server, not to this app. Zeroing the badge
@@ -416,11 +473,24 @@ namespace LumigramPlus.App
 
             try
             {
-                await Messages.MarkReadAsync(client, _peer.Kind, _peer.PeerId,
-                                             _peer.AccessHash, maxId, TelegramService.Info);
+                // readHistory on a forum clears every topic in it at once, so
+                // reading one thread would silence the badges on all the others.
+                if (_topicId != 0)
+                {
+                    await Topics.ReadAsync(client, _inputPeer, _topicId, maxId,
+                                           TelegramService.Info);
+                }
+                else
+                {
+                    await Messages.MarkReadAsync(client, _peer.Kind, _peer.PeerId,
+                                                 _peer.AccessHash, maxId,
+                                                 TelegramService.Info);
 
-                // So the list shows the change on the way back without a round trip.
-                _peer.UnreadCount = 0;
+                    // So the list shows the change on the way back without a round
+                    // trip. Not done for a topic: the count on the chat list row is
+                    // the forum's, and one topic's worth of it is not all of it.
+                    _peer.UnreadCount = 0;
+                }
             }
             catch (Exception)
             {
@@ -441,7 +511,7 @@ namespace LumigramPlus.App
         /// </summary>
         private void OpenWhereReadingStopped()
         {
-            int readTo = _peer != null ? _peer.ReadInboxMaxId : 0;
+            int readTo = _readTo;
 
             MessageItem first = null;
             foreach (MessageItem item in _messages)
@@ -499,8 +569,7 @@ namespace LumigramPlus.App
             {
                 MtprotoClient client = await TelegramService.ConnectAsync();
 
-                Messages.History history = await Messages.GetHistoryAsync(
-                    client, _inputPeer, HistoryCount, TelegramService.Info);
+                Messages.History history = await ReadHistoryAsync(client);
 
                 foreach (KeyValuePair<long, PeerInfo> pair in history.Senders)
                     _senders[pair.Key] = pair.Value;
@@ -977,6 +1046,46 @@ namespace LumigramPlus.App
             return element == null ? null : element.DataContext as MessageItem;
         }
 
+        // ---- copying ---------------------------------------------------------
+
+        /// <summary>
+        /// Hands a message's text to the system's text selection, which is the only
+        /// thing on this platform that can put anything on the clipboard.
+        ///
+        /// Windows Phone 8.1 has no Clipboard class - see the panel's own comment in
+        /// the XAML. So there is nothing to copy *to* here: the text goes into a box,
+        /// the box is selected, and the copy button the system draws over a selection
+        /// does the work. The other half of the pair needs no code at all, because
+        /// pasting into the message box is the keyboard's own paste key.
+        /// </summary>
+        private void CopyMenu_Click(object sender, RoutedEventArgs e)
+        {
+            MessageItem item = MenuItem(sender);
+            if (item == null || string.IsNullOrEmpty(item.Text)) return;
+
+            CopyBox.Text = item.Text;
+            CopyPanel.Visibility = Visibility.Visible;
+
+            // Focus first: a selection in an unfocused box draws no handles and no
+            // copy button, so selecting before focusing selects nothing visible.
+            CopyBox.Focus(FocusState.Programmatic);
+            CopyBox.SelectAll();
+        }
+
+        private void CloseCopy_Click(object sender, RoutedEventArgs e)
+        {
+            CloseCopy();
+        }
+
+        private void CloseCopy()
+        {
+            CopyPanel.Visibility = Visibility.Collapsed;
+
+            // Emptied rather than left: the box holds the last message copied, and
+            // the page outlives the panel.
+            CopyBox.Text = "";
+        }
+
         // ---- forwarding ------------------------------------------------------
 
         /// <summary>The message waiting for a destination.</summary>
@@ -1207,7 +1316,7 @@ namespace LumigramPlus.App
                 await Upload.SendLocationAsync(
                     client, TelegramService.Crypto, _inputPeer,
                     at.Point.Position.Latitude, at.Point.Position.Longitude,
-                    accuracy, TelegramService.Info);
+                    accuracy, TelegramService.Info, _topicId);
 
                 SetBusy(false, "");
                 Refresh();
@@ -1360,7 +1469,8 @@ namespace LumigramPlus.App
 
                 await Upload.SendVoiceAsync(
                     client, TelegramService.Crypto, _inputPeer, uploaded,
-                    encoded.DurationSeconds, encoded.Waveform, TelegramService.Info);
+                    encoded.DurationSeconds, encoded.Waveform, TelegramService.Info,
+                    _topicId);
 
                 SetBusy(false, "");
                 Refresh();
@@ -1449,7 +1559,7 @@ namespace LumigramPlus.App
                     {
                         pending.Id = await Upload.SendPhotoAsync(
                             client, TelegramService.Crypto, _inputPeer, uploaded, "",
-                            TelegramService.Info);
+                            TelegramService.Info, _topicId);
                     }
                     else if (type.StartsWith("video/"))
                     {
@@ -1462,14 +1572,15 @@ namespace LumigramPlus.App
                         pending.Id = await Upload.SendVideoAsync(
                             client, TelegramService.Crypto, _inputPeer, uploaded, "",
                             type, (int)video.Duration.TotalSeconds,
-                            (int)video.Width, (int)video.Height, TelegramService.Info);
+                            (int)video.Width, (int)video.Height, TelegramService.Info,
+                            _topicId);
                     }
                     else
                     {
                         pending.Id = await Upload.SendDocumentAsync(
                             client, TelegramService.Crypto, _inputPeer, uploaded, "",
                             type.Length > 0 ? type : "application/octet-stream",
-                            TelegramService.Info);
+                            TelegramService.Info, _topicId);
                     }
                 }
 
@@ -1605,7 +1716,7 @@ namespace LumigramPlus.App
                 // message comes back from the server there is nothing to recognise
                 // it by and it is added a second time.
                 pending.Id = await Messages.SendTextAsync(
-                    client, TelegramService.Crypto, _inputPeer, text, replyTo);
+                    client, TelegramService.Crypto, _inputPeer, text, replyTo, _topicId);
 
                 SetBusy(false, "");
             }

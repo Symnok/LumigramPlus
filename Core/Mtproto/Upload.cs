@@ -125,14 +125,16 @@ namespace Lumigram.Mtproto
         /// <summary>Sends an uploaded file as a photo.</summary>
         public static async Task<int> SendPhotoAsync(MtprotoClient client, ICrypto crypto,
                                                         byte[] inputPeer, UploadedFile file,
-                                                        string caption, ClientInfo info = null)
+                                                        string caption, ClientInfo info = null,
+                                                        int topicId = 0)
         {
             var media = new TlWriter(96);
             media.WriteConstructor(TlConstructors.InputMediaUploadedPhoto)
                  .WriteInt(0)                       // flags: no stickers, no ttl
                  .WriteRaw(BuildInputFile(file));
 
-            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), caption, info);
+            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), caption,
+                                        info, topicId);
         }
 
         /// <summary>
@@ -146,7 +148,7 @@ namespace Lumigram.Mtproto
                                                         byte[] inputPeer, UploadedFile file,
                                                         string caption, string mimeType,
                                                         int durationSeconds, int width, int height,
-                                                        ClientInfo info = null)
+                                                        ClientInfo info = null, int topicId = 0)
         {
             var attributes = new TlWriter(96);
             attributes.WriteConstructor(TlConstructors.Vector)
@@ -168,7 +170,8 @@ namespace Lumigram.Mtproto
                  .WriteString(mimeType ?? "video/mp4")
                  .WriteRaw(attributes.ToArray());
 
-            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), caption, info);
+            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), caption,
+                                        info, topicId);
         }
 
         /// <summary>
@@ -186,7 +189,7 @@ namespace Lumigram.Mtproto
         public static async Task<int> SendVoiceAsync(MtprotoClient client, ICrypto crypto,
                                                         byte[] inputPeer, UploadedFile file,
                                                         int durationSeconds, byte[] waveform,
-                                                        ClientInfo info = null)
+                                                        ClientInfo info = null, int topicId = 0)
         {
             const int voiceFlag = 1 << 10;
             const int waveformFlag = 1 << 2;
@@ -209,7 +212,8 @@ namespace Lumigram.Mtproto
                  .WriteString("audio/ogg")
                  .WriteRaw(attributes.ToArray());
 
-            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), null, info);
+            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), null,
+                                        info, topicId);
         }
 
         /// <summary>
@@ -220,7 +224,8 @@ namespace Lumigram.Mtproto
                                                            byte[] inputPeer,
                                                            double latitude, double longitude,
                                                            int accuracyMetres,
-                                                           ClientInfo info = null)
+                                                           ClientInfo info = null,
+                                                           int topicId = 0)
         {
             var point = new TlWriter(40);
             point.WriteConstructor(TlConstructors.InputGeoPoint)
@@ -235,14 +240,16 @@ namespace Lumigram.Mtproto
             media.WriteConstructor(TlConstructors.InputMediaGeoPoint)
                  .WriteRaw(point.ToArray());
 
-            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), null, info);
+            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), null,
+                                        info, topicId);
         }
 
         /// <summary>Sends an uploaded file as a plain document, keeping its name.</summary>
         public static async Task<int> SendDocumentAsync(MtprotoClient client, ICrypto crypto,
                                                            byte[] inputPeer, UploadedFile file,
                                                            string caption, string mimeType,
-                                                           ClientInfo info = null)
+                                                           ClientInfo info = null,
+                                                           int topicId = 0)
         {
             var attributes = new TlWriter(64);
             attributes.WriteConstructor(TlConstructors.Vector)
@@ -257,20 +264,34 @@ namespace Lumigram.Mtproto
                  .WriteString(mimeType ?? "application/octet-stream")
                  .WriteRaw(attributes.ToArray());
 
-            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), caption, info);
+            return await SendMediaAsync(client, crypto, inputPeer, media.ToArray(), caption,
+                                        info, topicId);
         }
 
+        /// <summary>
+        /// The one place a media send is written.
+        ///
+        /// The topic travels in the reply field, exactly as it does for text - see
+        /// <see cref="Messages.ReplyTo"/>. Without it an attachment sent from inside
+        /// a topic arrives in the forum's General topic instead, which is the sort
+        /// of thing nobody notices until somebody else points at it.
+        /// </summary>
         private static async Task<int> SendMediaAsync(MtprotoClient client, ICrypto crypto,
                                                          byte[] inputPeer, byte[] media,
-                                                         string caption, ClientInfo info)
+                                                         string caption, ClientInfo info,
+                                                         int topicId = 0)
         {
             long randomId = BitConverter.ToInt64(crypto.Random(8), 0);
+            byte[] replyTo = Messages.ReplyTo(0, topicId);
 
             var q = new TlWriter(media.Length + 96);
             q.WriteConstructor(TlConstructors.MessagesSendMedia)
-             .WriteInt(0)                           // flags
-             .WriteRaw(inputPeer)
-             .WriteRaw(media)
+             .WriteInt(replyTo != null ? 1 : 0)     // flags.0: reply_to
+             .WriteRaw(inputPeer);
+
+            if (replyTo != null) q.WriteRaw(replyTo);
+
+            q.WriteRaw(media)
              .WriteString(caption ?? "")
              .WriteLong(randomId);
 

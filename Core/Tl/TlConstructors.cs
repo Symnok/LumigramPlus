@@ -176,6 +176,60 @@ namespace Lumigram.Tl
         //   reply_to:flags.0?InputReplyTo message:string random_id:long ...
         public const uint MessagesSendMessage = 0xfef48f62;
 
+        // ---- forum topics ------------------------------------------------
+        //
+        // A forum is a supergroup whose messages are filed under topics. A topic
+        // is not a chat of its own: it is a thread hanging off one message in the
+        // group, named by that message's id. So a topic is addressed everywhere
+        // below by an int that is simultaneously its id and a message id in the
+        // parent channel - which is why reading one is getReplies rather than
+        // getHistory, and why sending into one is a reply.
+
+        // channel#d49f34c6 flags:# ... forum:flags.30?true ... = Chat
+        //
+        // Read for one bit. The dialog list says a chat is a channel, and nothing
+        // else distinguishes a forum from an ordinary supergroup - so without this
+        // the topics are invisible and every message lands in the wrong place.
+        public const uint Channel = 0xd49f34c6;
+        public const int ChannelForumFlag = 1 << 30;
+
+        // messages.getForumTopics#3ba47bff flags:# peer:InputPeer q:flags.0?string
+        //   offset_date:int offset_id:int offset_topic:int limit:int
+        //   = messages.ForumTopics
+        //
+        // Takes an InputPeer. The older channels.getForumTopics took an
+        // InputChannel; that spelling is gone at this layer.
+        public const uint MessagesGetForumTopics = 0x3ba47bff;
+
+        // messages.forumTopics#367617d3 flags:# count:int topics:Vector<ForumTopic>
+        //   messages:Vector<Message> chats:Vector<Chat> users:Vector<User> pts:int
+        public const uint MessagesForumTopics = 0x367617d3;
+
+        // forumTopic#fcdad815 flags:# ... id:int date:int peer:Peer title:string
+        //   icon_color:int icon_emoji_id:flags.0?long top_message:int
+        //   read_inbox_max_id:int ... = ForumTopic
+        public const uint ForumTopic = 0xfcdad815;
+
+        // forumTopicDeleted#23f109b id:int = ForumTopic
+        //
+        // Appears in the same vector as a live topic, carrying nothing but an id.
+        // Reading it as a forumTopic would produce a topic with no title.
+        public const uint ForumTopicDeleted = 0x023f109b;
+
+        // messages.getReplies#22ddd30c peer:InputPeer msg_id:int offset_id:int
+        //   offset_date:int add_offset:int limit:int max_id:int min_id:int hash:long
+        //
+        // msg_id is the topic. max_id is sent as int.MaxValue rather than 0, which
+        // is what Telegram's own clients send here.
+        public const uint MessagesGetReplies = 0x22ddd30c;
+
+        // messages.readDiscussion#f731a9f4 peer:InputPeer msg_id:int
+        //   read_max_id:int = Bool
+        //
+        // Marking a topic read, as opposed to the whole group. readHistory on the
+        // channel would clear every topic at once.
+        public const uint MessagesReadDiscussion = 0xf731a9f4;
+
         // ---- voice calls -------------------------------------------------
 
         // messages.getDhConfig#26cf8950 version:int random_length:int

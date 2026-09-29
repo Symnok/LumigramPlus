@@ -51,6 +51,13 @@
                                 Holding="Message_Holding">
                             <FlyoutBase.AttachedFlyout>
                                 <MenuFlyout>
+                                    <!-- First: on a text message it is the one
+                                         thing the menu is most often opened for,
+                                         and it is the only action here that needs
+                                         no round trip to the server. -->
+                                    <MenuFlyoutItem Text="copy text"
+                                                    Visibility="{Binding CopyVisibility}"
+                                                    Click="CopyMenu_Click"/>
                                     <MenuFlyoutItem Text="reply"
                                                     Visibility="{Binding ActionVisibility}"
                                                     Click="ReplyMenu_Click"/>
@@ -210,6 +217,56 @@
 
                 <Button Grid.Row="2" Content="cancel" HorizontalAlignment="Stretch"
                         Margin="0,8,0,0" Click="CancelForward_Click"/>
+            </Grid>
+        </Border>
+
+        <!--
+          Copying a message's text.
+
+          Windows Phone 8.1 has no clipboard API. Windows.ApplicationModel.
+          DataTransfer is present and ships DataPackage, DataTransferManager and
+          the share contract - but no Clipboard class at all, so an app cannot put
+          text on the clipboard itself. Checked against Windows.winmd in the
+          Windows Phone Kits 8.1 reference set, not assumed.
+
+          What the platform does give is text selection, and the copy button the
+          system draws over a selection. So the message goes into a text box which
+          is then selected, and the system does the copying. That is also why
+          nothing here has a "paste" counterpart: pasting into the message box
+          already works, because the keyboard's paste key is the system's too.
+
+          The box is left editable on purpose. A read-only TextBox is the obvious
+          shape for something that only exists to be read, and it is exactly the
+          thing whose selection behaviour varies; editing a throwaway copy costs
+          nothing, and this way the selection is certain to work.
+        -->
+        <Border x:Name="CopyPanel" Grid.RowSpan="4" Visibility="Collapsed"
+                Background="{ThemeResource PhoneBackgroundBrush}">
+            <Grid Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="copy text" FontSize="20" Margin="0,0,0,4"/>
+
+                <TextBlock Grid.Row="1" TextWrapping="Wrap" Opacity="0.7" FontSize="13"
+                           Margin="0,0,0,8"
+                           Text="Already selected - tap copy above the text. Hold the text to select part of it instead."/>
+
+                <!-- PreventKeyboardDisplayOnProgrammaticFocus: the box has to be
+                     focused for the selection to show its copy button, and
+                     focusing it otherwise raises the keyboard over the text the
+                     user is trying to look at. -->
+                <TextBox x:Name="CopyBox" Grid.Row="2" TextWrapping="Wrap"
+                         AcceptsReturn="True" VerticalAlignment="Stretch"
+                         PreventKeyboardDisplayOnProgrammaticFocus="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+
+                <Button Grid.Row="3" Content="done" HorizontalAlignment="Stretch"
+                        Margin="0,8,0,0" Click="CloseCopy_Click"/>
             </Grid>
         </Border>
 

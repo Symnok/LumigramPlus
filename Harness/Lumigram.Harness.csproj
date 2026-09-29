@@ -72,6 +72,7 @@
     <Compile Include="LoginCommand.cs" />
     <Compile Include="SessionStore.cs" />
     <Compile Include="MessageCommand.cs" />
+    <Compile Include="TopicsCommand.cs" />
     <Compile Include="ListenCommand.cs" />
     <Compile Include="QrTests.cs" />
     <Compile Include="QrLoginCommand.cs" />
@@ -194,6 +195,9 @@
     </Compile>
     <Compile Include="..\Core\Mtproto\Peers.cs">
       <Link>Core\Mtproto\Peers.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Topics.cs">
+      <Link>Core\Mtproto\Topics.cs</Link>
     </Compile>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

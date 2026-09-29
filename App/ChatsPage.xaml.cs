@@ -55,6 +55,16 @@ namespace LumigramPlus.App
         public long AccessHash { get; set; }
         public string Kind { get; set; }
 
+        /// <summary>
+        /// Whether this supergroup files its messages under topics.
+        ///
+        /// Decides what tapping the row opens. Copied off the entry rather than read
+        /// through it, because the rest of this class is copied too and a row that
+        /// reaches back into its source for one field is the one that breaks when
+        /// something builds a row without one.
+        /// </summary>
+        public bool IsForum { get; set; }
+
         // These change while the list is on screen, so each one tells its row about
         // it. Rebuilding the collection instead would flicker every few seconds and
         // throw away the avatars that had been fetched.
@@ -260,7 +270,7 @@ namespace LumigramPlus.App
             DialogItem item = Find(_bannerPeerId);
             if (item == null) return;
 
-            Frame.Navigate(typeof(ConversationPage), item);
+            Open(item);
         }
 
         private void StartPolling()
@@ -785,7 +795,7 @@ namespace LumigramPlus.App
             if (item == null) return false;
 
             Notifications.PendingPeerId = 0;
-            Frame.Navigate(typeof(ConversationPage), item);
+            Open(item);
             return true;
         }
 
@@ -821,6 +831,7 @@ namespace LumigramPlus.App
                 PhotoId = d.PhotoId,
                 ReadInboxMaxId = d.ReadInboxMaxId,
                 Archived = d.Archived,
+                IsForum = d.IsForum,
                 Entry = d,
             };
         }
@@ -924,10 +935,25 @@ namespace LumigramPlus.App
             var item = e.ClickedItem as DialogItem;
             if (item == null) return;
 
-            // The item itself is passed rather than its fields in a query string:
-            // both pages are in this app, and reassembling a peer from text is a
-            // chance to lose the access hash.
-            Frame.Navigate(typeof(ConversationPage), item);
+            Open(item);
+        }
+
+        /// <summary>
+        /// Opens a chat - or, for a forum, the list of what is in it.
+        ///
+        /// A forum supergroup has no single conversation to show: its messages are
+        /// filed under topics, and opening it as an ordinary chat would produce
+        /// every thread interleaved, with anything sent back landing in whichever
+        /// topic the server picked. So the topics come first, and a conversation
+        /// starts once one of them is chosen.
+        ///
+        /// The item itself is passed rather than its fields in a query string: both
+        /// pages are in this app, and reassembling a peer from text is a chance to
+        /// lose the access hash.
+        /// </summary>
+        private void Open(DialogItem item)
+        {
+            Frame.Navigate(item.IsForum ? typeof(TopicsPage) : typeof(ConversationPage), item);
         }
 
         private static string Shorten(string text)

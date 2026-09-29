@@ -111,6 +111,97 @@ namespace Lumigram.Harness
                 }
             }
 
+            Section("forum topics");
+            {
+                byte[] forum = Messages.InputPeerFor("channel", 555444, 0x1020304050607080L);
+                const int topic = 9876;
+
+                // Reading a topic. msg_id is the thread and comes first, before the
+                // offsets - written after them, the server answers with the whole
+                // group starting at an offset nobody asked for.
+                {
+                    var r = new TlReader(Topics.HistoryBody(forum, topic, 30));
+
+                    Eq("replies ctor", TlConstructors.MessagesGetReplies, r.ReadConstructor());
+                    Eq("replies peer", TlConstructors.InputPeerChannel, r.ReadConstructor());
+                    r.ReadLong(); r.ReadLong();
+                    Eq("replies thread", topic, r.ReadInt());
+                    Eq("replies offset_id", 0, r.ReadInt());
+                    Eq("replies offset_date", 0, r.ReadInt());
+                    Eq("replies add_offset", 0, r.ReadInt());
+                    Eq("replies limit", 30, r.ReadInt());
+                    Eq("replies max_id", int.MaxValue, r.ReadInt());
+                    Eq("replies min_id", 0, r.ReadInt());
+                    Eq("replies hash", 0L, r.ReadLong());
+                    Eq("replies consumed", 0, r.Remaining);
+                }
+
+                // Sending into one. The topic is named twice: as the thread, and as
+                // the message being replied to - which is what files the message
+                // under it rather than at the top of the group.
+                {
+                    var r = new TlReader(Messages.SendTextBody(forum, "hi", 11L, 0, topic));
+
+                    Eq("topic send ctor", TlConstructors.MessagesSendMessage, r.ReadConstructor());
+                    Eq("topic send flags", 1, r.ReadInt());
+                    Eq("topic send peer", TlConstructors.InputPeerChannel, r.ReadConstructor());
+                    r.ReadLong(); r.ReadLong();
+                    Eq("topic box", TlConstructors.InputReplyToMessage, r.ReadConstructor());
+                    Eq("topic box flags", 1, r.ReadInt());
+                    Eq("topic reply target", topic, r.ReadInt());
+                    Eq("topic top_msg_id", topic, r.ReadInt());
+                    Eq("topic send text", "hi", r.ReadString());
+                    Eq("topic send random", 11L, r.ReadLong());
+                    Eq("topic send consumed", 0, r.Remaining);
+                }
+
+                // Replying to a particular message inside a topic: the thread is
+                // still named, but the reply target is the message, not the topic.
+                // Both, or the reply lands in the forum with no thread.
+                {
+                    var r = new TlReader(Messages.SendTextBody(forum, "re", 12L, 12345, topic));
+
+                    r.ReadConstructor();
+                    Eq("in-topic reply flags", 1, r.ReadInt());
+                    r.ReadConstructor(); r.ReadLong(); r.ReadLong();
+                    Eq("in-topic box", TlConstructors.InputReplyToMessage, r.ReadConstructor());
+                    Eq("in-topic box flags", 1, r.ReadInt());
+                    Eq("in-topic reply target", 12345, r.ReadInt());
+                    Eq("in-topic top_msg_id", topic, r.ReadInt());
+                    Eq("in-topic text", "re", r.ReadString());
+                }
+
+                // The General topic. Its id is not a message that can be replied
+                // to, so it is named only as the thread and the reply target stays
+                // zero - sending it as a reply to message 1 is refused.
+                {
+                    var r = new TlReader(
+                        Messages.SendTextBody(forum, "g", 13L, 0, Topics.GeneralTopicId));
+
+                    r.ReadConstructor();
+                    Eq("general flags", 1, r.ReadInt());
+                    r.ReadConstructor(); r.ReadLong(); r.ReadLong();
+                    Eq("general box", TlConstructors.InputReplyToMessage, r.ReadConstructor());
+                    Eq("general box flags", 1, r.ReadInt());
+                    Eq("general reply target", 0, r.ReadInt());
+                    Eq("general top_msg_id", Topics.GeneralTopicId, r.ReadInt());
+                    Eq("general text", "g", r.ReadString());
+                }
+
+                // And with no topic at all, nothing above may leak into an ordinary
+                // send: no reply box, and no top_msg_id bit.
+                {
+                    var r = new TlReader(Messages.SendTextBody(forum, "plain", 14L, 0, 0));
+
+                    r.ReadConstructor();
+                    Eq("plain flags", 0, r.ReadInt());
+                    r.ReadConstructor(); r.ReadLong(); r.ReadLong();
+                    Eq("plain text", "plain", r.ReadString());
+                    Eq("plain random", 14L, r.ReadLong());
+                    Eq("plain consumed", 0, r.Remaining);
+                }
+            }
+
             Section("byte strings and padding");
             {
                 // Lengths around every boundary that changes the encoding.

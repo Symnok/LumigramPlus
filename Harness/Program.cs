@@ -80,6 +80,9 @@ namespace Lumigram.Harness
                 case "dialogs":
                     return MessageCommand.RunDialogs(args);
 
+                case "topics":
+                    return TopicsCommand.Run(args);
+
                 case "listen":
                     return ListenCommand.Run(args);
 
@@ -111,7 +114,7 @@ namespace Lumigram.Harness
                     return ListenCommand.RunDiffTest(args);
 
                 default:
-                    Console.WriteLine("usage: Lumigram.Harness [test|bigint|crypto|tl|handshake|nearestdc|sendcode <phone> [host]|signin <code>|qrlogin|password <pw>|send <text>|history [n]|dialogs [n]|listen [seconds]|voice <file.opus>|voicemake <out.opus>|skewtest|difftest]");
+                    Console.WriteLine("usage: Lumigram.Harness [test|bigint|crypto|tl|handshake|nearestdc|sendcode <phone> [host]|signin <code>|qrlogin|password <pw>|send <text>|history [n]|dialogs [n]|topics <forum> [topic]|listen [seconds]|voice <file.opus>|voicemake <out.opus>|skewtest|difftest]");
                     return 2;
             }
         }

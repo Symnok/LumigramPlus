@@ -62,6 +62,15 @@ namespace Lumigram.Mtproto
         /// </summary>
         public int MutedUntil;
 
+        /// <summary>
+        /// Whether this supergroup files its messages under topics.
+        ///
+        /// Nothing else in the dialog entry distinguishes a forum from an ordinary
+        /// supergroup, and the difference decides what opening it should show and
+        /// where a message sent to it ends up.
+        /// </summary>
+        public bool IsForum;
+
         /// <summary>Profile or chat picture, and where it lives. Zero when unset.</summary>
         public long PhotoId;
         public int PhotoDcId;
@@ -220,14 +229,45 @@ namespace Lumigram.Mtproto
         /// </summary>
         public static async Task<int> SendTextAsync(MtprotoClient client, ICrypto crypto,
                                                     byte[] inputPeer, string text,
-                                                    int replyToMsgId = 0)
+                                                    int replyToMsgId = 0, int topicId = 0)
         {
             long randomId = BitConverter.ToInt64(crypto.Random(8), 0);
 
             TlReader r = await client.InvokeAsync(
-                SendTextBody(inputPeer, text, randomId, replyToMsgId));
+                SendTextBody(inputPeer, text, randomId, replyToMsgId, topicId));
 
             return SentMessageId(TlSchema.ReadObject(r));
+        }
+
+        /// <summary>
+        /// The boxed InputReplyTo a send carries, or null when it carries none.
+        ///
+        /// Shared by text and media sends: the two differ in what follows the peer,
+        /// but the reply field is flags.0 of both.
+        ///
+        /// A topic is named here rather than beside the peer, because a topic is not
+        /// a peer - it is a thread, and a message joins one by replying into it.
+        /// top_msg_id names the thread; reply_to_msg_id names the message being
+        /// answered, which when nothing in particular is being answered is the
+        /// topic's own id. The General topic is the exception: its id is not a
+        /// message anybody can reply to, so it is named only as the thread and the
+        /// reply target is left at zero.
+        /// </summary>
+        public static byte[] ReplyTo(int replyToMsgId, int topicId)
+        {
+            if (replyToMsgId == 0 && topicId == 0) return null;
+
+            int target = replyToMsgId;
+            if (target == 0 && topicId != Topics.GeneralTopicId) target = topicId;
+
+            var q = new TlWriter(24);
+            q.WriteConstructor(TlConstructors.InputReplyToMessage)
+             .WriteInt(topicId != 0 ? 1 : 0)        // flags.0: top_msg_id
+             .WriteInt(target);
+
+            if (topicId != 0) q.WriteInt(topicId);
+
+            return q.ToArray();
         }
 
         /// <summary>
@@ -237,19 +277,16 @@ namespace Lumigram.Mtproto
         /// rejected only by the server.
         /// </summary>
         public static byte[] SendTextBody(byte[] inputPeer, string text, long randomId,
-                                          int replyToMsgId)
+                                          int replyToMsgId, int topicId = 0)
         {
+            byte[] replyTo = ReplyTo(replyToMsgId, topicId);
+
             var q = new TlWriter(text.Length + 64);
             q.WriteConstructor(TlConstructors.MessagesSendMessage)
-             .WriteInt(replyToMsgId != 0 ? 1 : 0)   // flags.0: reply_to
+             .WriteInt(replyTo != null ? 1 : 0)     // flags.0: reply_to
              .WriteRaw(inputPeer);
 
-            if (replyToMsgId != 0)
-            {
-                q.WriteConstructor(TlConstructors.InputReplyToMessage)
-                 .WriteInt(0)                       // no top_msg_id, peer, or quote
-                 .WriteInt(replyToMsgId);
-            }
+            if (replyTo != null) q.WriteRaw(replyTo);
 
             q.WriteString(text)
              .WriteLong(randomId);
@@ -641,6 +678,7 @@ namespace Lumigram.Mtproto
             var lastDate = new Dictionary<string, int>();
             var contacts = new List<long>();
             var bots = new List<long>();
+            var forums = new List<long>();
             var hashes = new Dictionary<string, long>();
             var photos = new Dictionary<string, long>();
             var photoDcs = new Dictionary<string, int>();
@@ -698,6 +736,13 @@ namespace Lumigram.Mtproto
                     hashes["chat:" + c.Long("id")] = h;
                     hashes["channel:" + c.Long("id")] = h;
                 }
+
+                // forum is bit 30 of the channel flags, and a true-flag, so it has
+                // no field of its own to read - only the bit. Absent from the
+                // generated table for that reason.
+                if (c.Ctor == TlConstructors.Channel &&
+                    (c.IntOr("flags", 0) & TlConstructors.ChannelForumFlag) != 0)
+                    forums.Add(c.Long("id"));
             }
 
             foreach (object o in response.Vec("messages"))
@@ -759,6 +804,8 @@ namespace Lumigram.Mtproto
                     Archived = folderId != 0,
                     IsBot = bots.Contains(PeerId(peer)),
                     IsContact = contacts.Contains(PeerId(peer)),
+                    IsForum = peer.Ctor == TlConstructors.PeerChannel &&
+                              forums.Contains(PeerId(peer)),
                 });
             }
 

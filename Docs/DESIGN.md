@@ -36,6 +36,7 @@ Checked against the installed WP8.1 reference assemblies and Windows.winmd
 | BigInteger     | NOT AVAILABLE - `Crypto/BigInt`                     |
 | PBKDF2         | NOT AVAILABLE - `Crypto/Pbkdf2` (2FA needs SHA-512) |
 | gzip inflate   | NOT AVAILABLE - `Tl/Inflate` (RFC 1951/1952)        |
+| clipboard      | NOT AVAILABLE - see below                           |
 
 AES ended up in managed code rather than behind the shim: IGE chains block to
 block, so a platform block cipher would cost one interop call per 16 bytes.
@@ -45,6 +46,25 @@ Telegram compresses any sizeable response, so `account.getPassword` arrives
 gzipped and a client without inflate cannot log in at all. And the desktop's
 `Rfc2898DeriveBytes` is SHA-1 only in .NET 4.5, so even the *desktop* head
 needed the portable PBKDF2.
+
+## There is no clipboard
+
+`Windows.ApplicationModel.DataTransfer` is present on WP8.1 and ships
+`DataPackage`, `DataTransferManager`, `StandardDataFormats` and the whole share
+contract - and no `Clipboard` class at all. Checked by disassembling
+`Windows.winmd` from the Windows Phone Kits 8.1 reference set: zero occurrences
+of the name in 277,000 lines of IL. The SDK's own `Windows.xml` documents
+`Clipboard` anyway, because that file is shared with the Windows 8.1 SDK, so
+reading the docs rather than the metadata gives the wrong answer.
+
+So an app cannot put text on the clipboard. What the platform does give is text
+selection - `TextBox.SelectAll`/`Select`/`SelectedText`, and the copy button the
+system draws over a selection - which is the only route there is. Copying a
+message therefore means putting its text in a box and selecting it, and letting
+the user tap the system's own button.
+
+Pasting needs no code for the same reason from the other side: the paste key
+belongs to the keyboard, so the message box already accepts one.
 
 WP8.1 Silverlight has no `System.Numerics` and no `System.Security.Cryptography`.
 That is why the core carries its own big-integer arithmetic instead of the
@@ -87,6 +107,38 @@ shape since layer 73 even where the constructor id did not.
 
 MTProto 2.0 itself was unaffected - handshake, encryption and sessions all
 worked unchanged at both layers. Only the API surface above it moved.
+
+## Forum topics
+
+A topic is not a chat. It is a thread hanging off one message in the supergroup,
+and that message's id is the topic's name everywhere:
+
+    list topics    messages.getForumTopics(peer)        - peer, not channel:
+                                                          the older
+                                                          channels.getForumTopics
+                                                          is gone at layer 228
+    read a topic   messages.getReplies(peer, msg_id=T)  - getHistory cannot say
+                                                          which thread, so it
+                                                          returns all of them
+    mark it read   messages.readDiscussion(peer, T, m)  - readHistory clears
+                                                          every topic at once
+    send into it   reply_to = inputReplyToMessage {
+                       top_msg_id      = T              - the thread
+                       reply_to_msg_id = T, or the
+                                         message being
+                                         answered
+                   }
+
+The General topic, id 1, is the exception in the last of these: its id is not a
+message anyone can reply to, so it is named only as the thread and the reply
+target stays zero. This follows TDLib, whose `MessageTopic` makes the same
+distinction.
+
+Nothing here needed the schema regenerating - every constructor involved was
+already in the layer-228 table. What it needed was the `forum` bit, flags.30 of
+`channel`, which is a true-flag and so appears in no generated field list: with
+it a supergroup opens as a list of topics, and without it as one interleaved
+stream where everything sent back lands in General.
 
 ## State
 
