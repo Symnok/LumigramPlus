@@ -196,6 +196,9 @@
     <Compile Include="..\Core\Mtproto\Peers.cs">
       <Link>Core\Mtproto\Peers.cs</Link>
     </Compile>
+    <Compile Include="..\Core\Mtproto\CrossDc.cs">
+      <Link>Core\Mtproto\CrossDc.cs</Link>
+    </Compile>
     <Compile Include="..\Core\Mtproto\Topics.cs">
       <Link>Core\Mtproto\Topics.cs</Link>
     </Compile>

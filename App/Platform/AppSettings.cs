@@ -14,6 +14,31 @@ namespace LumigramPlus.App
     }
 
     /// <summary>
+    /// How large the text people read is drawn.
+    ///
+    /// Beside the setting rather than beside TextSizes, which applies it: the
+    /// background task compiles this file and cannot see a XAML type.
+    /// </summary>
+    internal enum TextSize
+    {
+        /// <summary>What the app was before anyone asked.</summary>
+        Small = 0,
+
+        /// <summary>The default.</summary>
+        Medium = 1,
+
+        Large = 2,
+
+        // Added after the first three, and numbered after them rather than around
+        // them. The value is what is written to LocalSettings, so renumbering to
+        // put these in visual order would quietly turn somebody's stored Large into
+        // Medium on the next launch. TextSizes.Order carries the order they are
+        // shown in, which is the only place it matters.
+        ExtraSmall = 3,
+        ExtraLarge = 4,
+    }
+
+    /// <summary>
     /// What the user has chosen.
     ///
     /// LocalSettings rather than a file: these are a handful of switches, they are
@@ -30,6 +55,7 @@ namespace LumigramPlus.App
         private const string NotificationsKey = "notifications";
         private const string NotificationSoundKey = "notificationSound";
         private const string BackgroundKey = "backgroundMode";
+        private const string TextSizeKey = "textSize";
 
         /// <summary>
         /// Whether pictures are fetched as soon as they appear.
@@ -104,6 +130,45 @@ namespace LumigramPlus.App
             set
             {
                 try { ApplicationData.Current.LocalSettings.Values[BackgroundKey] = (int)value; }
+                catch (Exception) { }
+            }
+        }
+
+        /// <summary>
+        /// How large the text people read is drawn.
+        ///
+        /// Medium by default, and Medium is larger than the app shipped with -
+        /// which was one size for everything and too small to read comfortably on
+        /// the screens this runs on. Small is that original size, kept so the change
+        /// takes nothing away from anyone who was happy with it.
+        /// </summary>
+        public static TextSize TextSize
+        {
+            get
+            {
+                try
+                {
+                    object stored = ApplicationData.Current.LocalSettings.Values[TextSizeKey];
+                    if (!(stored is int)) return TextSize.Medium;
+
+                    int value = (int)stored;
+
+                    // Asked of the enum rather than range-checked. The range test
+                    // this replaces was written when Large was the largest number
+                    // as well as the largest size, and adding two members after it
+                    // would have made both of them read back as Medium forever.
+                    if (!Enum.IsDefined(typeof(TextSize), value)) return TextSize.Medium;
+
+                    return (TextSize)value;
+                }
+                catch (Exception)
+                {
+                    return TextSize.Medium;
+                }
+            }
+            set
+            {
+                try { ApplicationData.Current.LocalSettings.Values[TextSizeKey] = (int)value; }
                 catch (Exception) { }
             }
         }

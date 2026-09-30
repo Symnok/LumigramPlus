@@ -53,7 +53,8 @@
 
                         <StackPanel Grid.Column="1">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="{Binding Title}" FontSize="20"
+                                <TextBlock Text="{Binding Title}"
+                                           FontSize="{StaticResource AppListTitleFontSize}"
                                            TextTrimming="CharacterEllipsis"/>
                                 <!-- A closed topic can still be read, so it is
                                      listed - but nothing can be said in it, and
@@ -63,7 +64,8 @@
                                            Margin="8,7,0,0"
                                            Visibility="{Binding ClosedVisibility}"/>
                             </StackPanel>
-                            <TextBlock Text="{Binding Preview}" Opacity="0.6" FontSize="14"
+                            <TextBlock Text="{Binding Preview}" Opacity="0.6"
+                                       FontSize="{StaticResource AppSubtleFontSize}"
                                        TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
 
@@ -71,7 +73,7 @@
                                 Background="{ThemeResource PhoneAccentBrush}"
                                 CornerRadius="11" Padding="8,2,8,2" VerticalAlignment="Center">
                             <TextBlock Text="{Binding UnreadCount}" Foreground="White"
-                                       FontSize="14"/>
+                                       FontSize="{StaticResource AppSubtleFontSize}"/>
                         </Border>
                     </Grid>
                 </DataTemplate>

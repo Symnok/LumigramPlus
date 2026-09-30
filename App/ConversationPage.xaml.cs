@@ -1747,6 +1747,19 @@ namespace LumigramPlus.App
         /// asking to go far too far always lands exactly at the bottom, whereas
         /// asking for a number read a moment too early lands short.
         /// </summary>
+        /// <summary>
+        /// Jumps to the newest message.
+        ///
+        /// Reading back through a long conversation leaves a lot of scrolling
+        /// between the reader and the bottom, and the page returns there by itself
+        /// only when something new arrives. This is the way back without waiting for
+        /// somebody else to say something.
+        /// </summary>
+        private void SkipToEnd_Click(object sender, RoutedEventArgs e)
+        {
+            ScrollToEnd();
+        }
+
         private void ScrollToEnd()
         {
             var ignored = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low,

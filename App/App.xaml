@@ -3,4 +3,32 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:LumigramPlus.App">
+
+    <!--
+      The sizes the reading parts of the app are drawn at.
+
+      Declared here at their Medium values and overwritten from TextSizes before the
+      first page is built, so a page that asks for one with StaticResource gets the
+      size the user chose. StaticResource is resolved when a page is parsed, which is
+      what makes this work at all - and also why a change takes hold as each screen
+      is reopened rather than under the screen that changed it.
+
+      Only the text people read is here. Page headings and the explanatory lines in
+      the settings keep fixed sizes: making those follow as well turns a reading
+      preference into a magnifier over the whole app, and the chrome is not what
+      anybody was struggling with.
+    -->
+    <Application.Resources>
+        <!-- Message text. -->
+        <x:Double x:Key="AppBodyFontSize">19</x:Double>
+
+        <!-- Chat and topic names in a list. -->
+        <x:Double x:Key="AppListTitleFontSize">23</x:Double>
+
+        <!-- Last-message previews, who wrote a message, what an attachment is. -->
+        <x:Double x:Key="AppSubtleFontSize">16</x:Double>
+
+        <!-- Timestamps and the like. -->
+        <x:Double x:Key="AppCaptionFontSize">13</x:Double>
+    </Application.Resources>
 </Application>

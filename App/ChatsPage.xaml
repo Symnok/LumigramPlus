@@ -65,7 +65,7 @@
                         <StackPanel Grid.Column="1">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                                           FontSize="20"/>
+                                           FontSize="{StaticResource AppListTitleFontSize}"/>
                                 <!--
                                   A crossed-out speaker, drawn rather than written.
                                   A word costs a piece of the title on a narrow
@@ -82,7 +82,8 @@
                                           Data="M9.5,3.5 L15.5,8.5 M15.5,3.5 L9.5,8.5"/>
                                 </Canvas>
                             </StackPanel>
-                            <TextBlock Text="{Binding Preview}" Opacity="0.6" FontSize="14"
+                            <TextBlock Text="{Binding Preview}" Opacity="0.6"
+                                       FontSize="{StaticResource AppSubtleFontSize}"
                                        TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
 
@@ -90,7 +91,7 @@
                                 Background="{ThemeResource PhoneAccentBrush}"
                                 CornerRadius="11" Padding="8,2,8,2" VerticalAlignment="Center">
                             <TextBlock Text="{Binding UnreadCount}" Foreground="White"
-                                       FontSize="14"/>
+                                       FontSize="{StaticResource AppSubtleFontSize}"/>
                         </Border>
                     </Grid>
                 </DataTemplate>

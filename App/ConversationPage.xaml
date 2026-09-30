@@ -88,13 +88,15 @@
                                      doubt, and labelling every line is noise. -->
                                 <TextBlock Text="{Binding SenderName}"
                                            Visibility="{Binding SenderVisibility}"
-                                           FontSize="13" Opacity="0.8" Margin="0,0,0,2"/>
+                                           FontSize="{StaticResource AppSubtleFontSize}"
+                                           Opacity="0.8" Margin="0,0,0,2"/>
                                 <!-- Tapping the caption is what fetches the picture,
                                      so it stays tappable after one is shown too. -->
                                 <TextBlock Text="{Binding MediaNote}"
                                            Visibility="{Binding MediaNoteVisibility}"
                                            TextWrapping="Wrap" Opacity="0.85"
-                                           FontSize="13" Margin="0,0,0,4"
+                                           FontSize="{StaticResource AppSubtleFontSize}"
+                                           Margin="0,0,0,4"
                                            Tapped="Media_Tap"/>
                                 <Grid Visibility="{Binding PictureVisibility}"
                                       Margin="0,0,0,4" HorizontalAlignment="Left"
@@ -117,8 +119,11 @@
                                     </Grid>
                                 </Grid>
                                 <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                                           FontSize="{StaticResource AppBodyFontSize}"
                                            Visibility="{Binding TextVisibility}"/>
-                                <TextBlock Text="{Binding Time}" FontSize="11" Opacity="0.5"
+                                <TextBlock Text="{Binding Time}"
+                                           FontSize="{StaticResource AppCaptionFontSize}"
+                                           Opacity="0.5"
                                            HorizontalAlignment="Right" Margin="0,2,0,0"/>
                             </StackPanel>
                         </Border>
@@ -140,7 +145,8 @@
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock Text="replying to" FontSize="11" Opacity="0.6"/>
                         <TextBlock x:Name="ReplyText" TextWrapping="NoWrap"
-                                   TextTrimming="CharacterEllipsis" FontSize="13"/>
+                                   TextTrimming="CharacterEllipsis"
+                                   FontSize="{StaticResource AppSubtleFontSize}"/>
                     </StackPanel>
                     <Button Grid.Column="1" Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
                             FontSize="14" Padding="8,2,8,2" MinWidth="0"
@@ -184,6 +190,7 @@
             </Border>
 
             <TextBox x:Name="ComposeBox" TextWrapping="NoWrap" Margin="0,8,0,0"
+                     FontSize="{StaticResource AppBodyFontSize}"
                      KeyDown="Compose_KeyDown" PlaceholderText="message"/>
         </StackPanel>
         <!--
@@ -261,6 +268,7 @@
                      focusing it otherwise raises the keyboard over the text the
                      user is trying to look at. -->
                 <TextBox x:Name="CopyBox" Grid.Row="2" TextWrapping="Wrap"
+                         FontSize="{StaticResource AppBodyFontSize}"
                          AcceptsReturn="True" VerticalAlignment="Stretch"
                          PreventKeyboardDisplayOnProgrammaticFocus="True"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"/>
@@ -317,6 +325,13 @@
                           Visibility="Collapsed" Click="Call_Click"/>
             <AppBarButton x:Name="SendButton" Icon="Send" Label="send" Click="Send_Click"/>
             <AppBarButton Icon="Refresh" Label="refresh" Click="Refresh_Click"/>
+
+            <!-- Behind the "..." rather than on the bar itself. The bar is narrow,
+                 every button on it is width the message box does not get, and this
+                 is wanted after a scroll back rather than while typing. -->
+            <CommandBar.SecondaryCommands>
+                <AppBarButton Label="skip to end" Click="SkipToEnd_Click"/>
+            </CommandBar.SecondaryCommands>
         </CommandBar>
     </Page.BottomAppBar>
 </Page>

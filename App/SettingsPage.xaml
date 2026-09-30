@@ -28,7 +28,20 @@
                       HorizontalScrollBarVisibility="Disabled"
                       Margin="0,0,-16,-16" Padding="0,0,16,16">
         <StackPanel>
+            <TextBlock Text="Text size" Margin="0,0,0,4"/>
+            <ComboBox x:Name="TextSizeBox" HorizontalAlignment="Stretch"
+                      SelectionChanged="TextSize_Changed">
+                <ComboBoxItem Content="extra small"/>
+                <ComboBoxItem Content="small"/>
+                <ComboBoxItem Content="medium"/>
+                <ComboBoxItem Content="large"/>
+                <ComboBoxItem Content="extra large"/>
+            </ComboBox>
+            <TextBlock Text="Applies to messages and the chat list. Small is the size the app used before this setting existed. Each screen picks up a change the next time it is opened."
+                       TextWrapping="Wrap" Opacity="0.7" FontSize="13" Margin="0,4,0,0"/>
+
             <ToggleSwitch x:Name="AutoLoadSwitch" Header="Download photos automatically"
+                          Margin="0,20,0,0"
                           OnContent="on" OffContent="off"
                           Toggled="AutoLoad_Toggled"/>
             <TextBlock Text="Off means photos are fetched only when tapped, which is worth having on a metered connection."

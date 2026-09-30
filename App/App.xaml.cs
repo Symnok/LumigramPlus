@@ -17,6 +17,11 @@ namespace LumigramPlus.App
         {
             InitializeComponent();
 
+            // Before anything is built. The sizes are read with StaticResource,
+            // which resolves as a page is parsed - so a page created before this ran
+            // would keep the values declared in App.xaml whatever the user chose.
+            TextSizes.Apply();
+
             // Without this the hardware Back button closes the app from any page.
             // WinRT does not wire it to navigation for you - a Silverlight app gets
             // that behaviour by default, which is why its absence here reads as the

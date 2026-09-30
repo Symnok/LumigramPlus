@@ -29,6 +29,10 @@ namespace LumigramPlus.App
             base.OnNavigatedTo(e);
 
             _loading = true;
+            // Through TextSizes, not a cast: the list is in size order and the
+            // stored values are in the order the sizes were added, which stopped
+            // being the same thing when extra small and extra large arrived.
+            TextSizeBox.SelectedIndex = TextSizes.IndexOf(AppSettings.TextSize);
             AutoLoadSwitch.IsOn = AppSettings.AutoLoadPhotos;
             NotificationsSwitch.IsOn = AppSettings.Notifications;
             SoundSwitch.IsOn = AppSettings.NotificationSound;
@@ -133,6 +137,27 @@ namespace LumigramPlus.App
                 CacheText.Text = "Could not delete: " + ex.Message;
                 ClearCacheButton.IsEnabled = true;
             }
+        }
+
+        /// <summary>
+        /// Chooses how large the text people read is drawn.
+        ///
+        /// Applied at once so the sizes are in the resources, but the screens already
+        /// built keep what they were parsed with - a page reads its sizes once, when
+        /// it is created. In practice that is invisible: going back from here builds
+        /// the chat list again, and opening a conversation builds that. This page
+        /// itself does not change, which is why the note under the box says so
+        /// rather than leaving the user to wonder whether it worked.
+        /// </summary>
+        private void TextSize_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loading) return;
+
+            int index = TextSizeBox.SelectedIndex;
+            if (index < 0) return;
+
+            AppSettings.TextSize = TextSizes.At(index);
+            TextSizes.Apply();
         }
 
         private async void SignOut_Click(object sender, RoutedEventArgs e)
