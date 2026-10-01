@@ -71,6 +71,15 @@ namespace Lumigram.Mtproto
         /// </summary>
         public bool IsForum;
 
+        /// <summary>
+        /// The chat's public name, without its at-sign, or null when it has none.
+        ///
+        /// What decides whether a message in it has a shareable address: a chat with
+        /// a username has a t.me link anybody can open, and one without has only the
+        /// /c/ form that its own members can.
+        /// </summary>
+        public string Username;
+
         /// <summary>Profile or chat picture, and where it lives. Zero when unset.</summary>
         public long PhotoId;
         public int PhotoDcId;
@@ -439,6 +448,59 @@ namespace Lumigram.Mtproto
             return history;
         }
 
+        /// <summary>
+        /// Reads the messages around one, rather than the newest.
+        ///
+        /// Following a link to a message means showing it in its conversation, not
+        /// on its own: what was said before it is most of what makes it make sense.
+        /// So the window is centred on it, with roughly half the count each side.
+        ///
+        /// add_offset is how that is asked for, and it is negative on purpose.
+        /// offset_id alone means "older than this"; a negative add_offset steps the
+        /// window back up past it, which is the only way to be sent anything newer
+        /// than the message named.
+        /// </summary>
+        public static async Task<History> GetHistoryAroundAsync(MtprotoClient client,
+                                                                byte[] inputPeer, int messageId,
+                                                                int count,
+                                                                ClientInfo info = null)
+        {
+            TlReader r = await client.InvokeAsync(
+                AroundBody(inputPeer, messageId, count), info);
+
+            TlObject response = TlSchema.ReadObject(r);
+
+            var history = new History { Senders = Peers.Read(response) };
+            foreach (object o in response.Vec("messages"))
+                history.Messages.Add(ToTextMessage((TlObject)o));
+
+            return history;
+        }
+
+        /// <summary>
+        /// The messages.getHistory payload for a window centred on a message.
+        ///
+        /// Separated so the offsets can be checked without a connection: an
+        /// add_offset with the wrong sign is accepted by the server and answered
+        /// with a window that never contains the message asked about, which on
+        /// screen looks like the link being broken.
+        /// </summary>
+        public static byte[] AroundBody(byte[] inputPeer, int messageId, int count)
+        {
+            var q = new TlWriter(64);
+            q.WriteConstructor(TlConstructors.MessagesGetHistory)
+             .WriteRaw(inputPeer)
+             .WriteInt(messageId)               // offset_id: the message to centre on
+             .WriteInt(0)                       // offset_date
+             .WriteInt(-(count / 2))            // add_offset: step back for newer ones
+             .WriteInt(count)                   // limit
+             .WriteInt(0)                       // max_id
+             .WriteInt(0)                       // min_id
+             .WriteLong(0);                     // hash
+
+            return q.ToArray();
+        }
+
         public static async Task<List<TextMessage>> GetRecentAsync(MtprotoClient client,
                                                                    byte[] inputPeer, int count)
         {
@@ -679,6 +741,7 @@ namespace Lumigram.Mtproto
             var contacts = new List<long>();
             var bots = new List<long>();
             var forums = new List<long>();
+            var usernames = new Dictionary<string, string>();
             var hashes = new Dictionary<string, long>();
             var photos = new Dictionary<string, long>();
             var photoDcs = new Dictionary<string, int>();
@@ -692,6 +755,9 @@ namespace Lumigram.Mtproto
                 if (string.IsNullOrEmpty(name)) name = "user " + u.Long("id");
                 titles["user:" + u.Long("id")] = name;
                 if (u.Has("access_hash")) hashes["user:" + u.Long("id")] = u.Long("access_hash");
+
+                string handle = SafeStr(u, "username");
+                if (!string.IsNullOrEmpty(handle)) usernames["user:" + u.Long("id")] = handle;
 
                 // Flags rather than fields: contact is bit 11 and bot is bit 14, and
                 // neither appears in the generated table because both are true-flags.
@@ -718,6 +784,13 @@ namespace Lumigram.Mtproto
                 titles["chat:" + c.Long("id")] = string.IsNullOrEmpty(title)
                     ? "chat " + c.Long("id") : title;
                 titles["channel:" + c.Long("id")] = titles["chat:" + c.Long("id")];
+
+                // Only channels have one. A basic group cannot be made public
+                // without being turned into a supergroup first, which changes its
+                // id - so a username on a "chat" is a shape that does not occur.
+                string handle = SafeStr(c, "username");
+                if (!string.IsNullOrEmpty(handle))
+                    usernames["channel:" + c.Long("id")] = handle;
 
                 if (c.Has("photo"))
                 {
@@ -806,6 +879,7 @@ namespace Lumigram.Mtproto
                     IsContact = contacts.Contains(PeerId(peer)),
                     IsForum = peer.Ctor == TlConstructors.PeerChannel &&
                               forums.Contains(PeerId(peer)),
+                    Username = usernames.ContainsKey(key) ? usernames[key] : null,
                 });
             }
 

@@ -194,6 +194,7 @@
     <Compile Include="Platform\AvatarCache.cs" />
     <Compile Include="Platform\CacheStore.cs" />
     <Compile Include="Platform\FileDcPool.cs" />
+    <Compile Include="Platform\LinkRouter.cs" />
     <Compile Include="Platform\TextSizes.cs" />
     <Compile Include="Platform\MediaCache.cs" />
     <Compile Include="Platform\AppSettings.cs" />

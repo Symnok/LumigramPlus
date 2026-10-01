@@ -171,6 +171,39 @@ signed-in connection is always tried first unless a connection to that
 datacenter is already open. Building one on the strength of the hint alone would
 mean paying for a handshake to arrive back where it started.
 
+## Links back into Telegram
+
+A message's text is drawn as runs and hyperlinks rather than as a string, and the
+links that point at Telegram are followed in the app instead of the browser.
+Sending one of those to a browser lands the user on a page telling them to
+install Telegram, which is the one thing they demonstrably already have.
+
+Four shapes are recognised, which is what people actually paste:
+
+    @name                        a mention
+    https://t.me/name            a peer
+    https://t.me/name/391        one message in it
+    https://t.me/c/<id>/391      one message in a chat with no username
+
+A mention is given the t.me address it is shorthand for, so everything above the
+splitter treats the two alike. Everything t.me serves that is *not* a peer -
+invite links, sticker sets, proxies, share dialogs - is left as a web address on
+purpose: following one as though it were a username looks up somebody who does
+not exist and loses the user the link.
+
+The /c/ form carries the channel's own id, with no -100 in front, which is the
+same number this client uses everywhere else. It can only be followed by somebody
+already in that chat, because an id addresses nothing without the access hash
+that comes with it, and the only place this client holds hashes is the chat list.
+That is not a shortcoming of the client: it is what the link means.
+
+Opening at a particular message needs history centred on it rather than the
+newest - `add_offset` negative, which is the only way getHistory will return
+anything *newer* than the message named. While a conversation is parked there the
+five-second poll is held off, or it would staple the newest messages onto the end
+of a window from the middle of the conversation with everything between missing.
+"skip to end" is how the reader leaves that state.
+
 ## State
 
 Done, and verified against live Telegram:

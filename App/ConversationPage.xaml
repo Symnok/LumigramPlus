@@ -64,6 +64,11 @@
                                     <MenuFlyoutItem Text="forward..."
                                                     Visibility="{Binding ActionVisibility}"
                                                     Click="ForwardMenu_Click"/>
+                                    <!-- Only where a message has an address at all:
+                                         see MessageItem.LinkVisibility. -->
+                                    <MenuFlyoutItem Text="copy link"
+                                                    Visibility="{Binding LinkVisibility}"
+                                                    Click="CopyLinkMenu_Click"/>
                                     <MenuFlyoutItem Text="delete"
                                                     Visibility="{Binding ActionVisibility}"
                                                     Click="DeleteMenu_Click"/>
@@ -118,8 +123,18 @@
                                               Data="M0,0 L16,10 L0,20 Z"/>
                                     </Grid>
                                 </Grid>
-                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                                <!--
+                                  No Text binding: the body is assembled from runs
+                                  and hyperlinks in code, and Text and Inlines are
+                                  two names for the same storage - setting either
+                                  clears the other. Loaded is where that happens,
+                                  with DataContextChanged behind it because the list
+                                  recycles these containers and a recycled one is
+                                  never Loaded a second time.
+                                -->
+                                <TextBlock x:Name="MessageText" TextWrapping="Wrap"
                                            FontSize="{StaticResource AppBodyFontSize}"
+                                           Loaded="MessageText_Loaded"
                                            Visibility="{Binding TextVisibility}"/>
                                 <TextBlock Text="{Binding Time}"
                                            FontSize="{StaticResource AppCaptionFontSize}"

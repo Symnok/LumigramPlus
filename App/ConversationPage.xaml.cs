@@ -9,8 +9,10 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
+using Windows.UI.Xaml.Documents;
 using Lumigram.Audio;
 using Lumigram.Mtproto;
+using Lumigram.Tl;
 
 namespace LumigramPlus.App
 {
@@ -141,6 +143,25 @@ namespace LumigramPlus.App
         }
 
         /// <summary>
+        /// Whether this message has an address worth copying.
+        ///
+        /// A property of the chat rather than of the message - only a channel or
+        /// supergroup gives its messages t.me addresses - so the page works it out
+        /// once and stamps it on each message as it is added. A one-to-one
+        /// conversation has no links to its messages at all, and offering one that
+        /// quietly is not a link is worse than offering none.
+        /// </summary>
+        public bool CanLink { get; set; }
+
+        public Visibility LinkVisibility
+        {
+            get
+            {
+                return CanLink && Id != 0 ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>
         /// Whether there is anything to copy.
         ///
         /// The same condition as showing the text at all, which includes an
@@ -253,6 +274,18 @@ namespace LumigramPlus.App
         /// topic of a forum.
         /// </summary>
         private int _readTo;
+
+        /// <summary>
+        /// A message to open at, set when the page was reached by following a link.
+        ///
+        /// Changes which history is fetched rather than only where the list sits:
+        /// the message may be thousands back, and the newest thirty would not
+        /// contain it.
+        /// </summary>
+        private int _focusId;
+
+        /// <summary>Whether messages here have t.me addresses at all.</summary>
+        private bool _canLink;
 
         public ConversationPage()
         {
@@ -383,6 +416,11 @@ namespace LumigramPlus.App
             }
 
             _readTo = request != null ? request.ReadInboxMaxId : _peer.ReadInboxMaxId;
+            _focusId = request != null ? request.FocusMessageId : 0;
+
+            // Only a channel or supergroup. A basic group cannot be made public, and
+            // a one-to-one conversation has no addressable messages at all.
+            _canLink = _peer.Kind == "channel";
 
             // Messages arriving for the chat on screen must not announce themselves.
             Notifications.OpenPeerId = _peer.PeerId;
@@ -412,7 +450,7 @@ namespace LumigramPlus.App
             {
                 MtprotoClient client = await TelegramService.ConnectAsync();
 
-                Messages.History history = await ReadHistoryAsync(client);
+                Messages.History history = await ReadHistoryAsync(client, _focusId);
 
                 foreach (KeyValuePair<long, PeerInfo> pair in history.Senders)
                     _senders[pair.Key] = pair.Value;
@@ -425,7 +463,8 @@ namespace LumigramPlus.App
 
                 SetBusy(false, _messages.Count == 0 ? "No messages yet." : "");
 
-                OpenWhereReadingStopped();
+                if (_focusId != 0) ShowFocused();
+                else OpenWhereReadingStopped();
 
                 MarkRead(client, history.Messages);
                 StartPolling();
@@ -446,9 +485,33 @@ namespace LumigramPlus.App
         /// </summary>
         private async Task<Messages.History> ReadHistoryAsync(MtprotoClient client)
         {
+            return await ReadHistoryAsync(client, 0);
+        }
+
+        /// <summary>
+        /// The messages to show: the newest, or a window around one in particular.
+        ///
+        /// <paramref name="around"/> is set only on the first load after following a
+        /// link. The refresh that follows every few seconds asks for the newest, as
+        /// always - a poll that kept re-centring on an old message would drag the
+        /// conversation back there every tick.
+        /// </summary>
+        private async Task<Messages.History> ReadHistoryAsync(MtprotoClient client, int around)
+        {
             if (_topicId != 0)
+            {
+                if (around != 0)
+                    return await Topics.GetHistoryAroundAsync(
+                        client, _inputPeer, _topicId, around, HistoryCount,
+                        TelegramService.Info);
+
                 return await Topics.GetHistoryAsync(client, _inputPeer, _topicId,
                                                     HistoryCount, TelegramService.Info);
+            }
+
+            if (around != 0)
+                return await Messages.GetHistoryAroundAsync(
+                    client, _inputPeer, around, HistoryCount, TelegramService.Info);
 
             return await Messages.GetHistoryAsync(client, _inputPeer, HistoryCount,
                                                   TelegramService.Info);
@@ -562,6 +625,13 @@ namespace LumigramPlus.App
         /// </summary>
         private async void Refresh()
         {
+            // Parked on a message somebody linked to. The window on screen is from
+            // the middle of the conversation, and the refresh asks for the newest -
+            // so adding what it returns would staple the last few messages onto the
+            // end of an old screenful with everything in between missing. Reading
+            // here stays still until the reader asks to go back to the end.
+            if (_focusId != 0) return;
+
             if (_refreshing) return;
             _refreshing = true;
 
@@ -656,6 +726,8 @@ namespace LumigramPlus.App
 
         private void Add(TextMessage m)
         {
+            // Worked out once per chat rather than per message; see
+            // MessageItem.CanLink.
             var item = new MessageItem
             {
                 Id = m.Id,
@@ -664,6 +736,7 @@ namespace LumigramPlus.App
                 Out = m.Out,
                 SenderName = SenderFor(m),
                 Media = m.Media,
+                CanLink = _canLink,
             };
 
             if (m.Media != null)
@@ -700,6 +773,151 @@ namespace LumigramPlus.App
         /// Not gated on the photo setting: this is kilobytes rather than megabytes,
         /// and the alternative is a video that looks like a sentence.
         /// </summary>
+        // ---- links in a message ----------------------------------------------
+
+        /// <summary>
+        /// Builds a message's body out of plain runs and tappable links.
+        ///
+        /// Called on Loaded and again on every DataContextChanged, because the list
+        /// recycles its containers: a container that has already been Loaded once is
+        /// handed the next message without being Loaded again, and a body built only
+        /// on Loaded would be whatever message happened to be there first.
+        /// </summary>
+        private void MessageText_Loaded(object sender, RoutedEventArgs e)
+        {
+            var block = sender as TextBlock;
+            if (block == null) return;
+
+            // Removed first: Loaded can run more than once for one container, and
+            // subscribing twice would rebuild the body twice on every reuse.
+            block.DataContextChanged -= MessageText_DataContextChanged;
+            block.DataContextChanged += MessageText_DataContextChanged;
+
+            FillInlines(block);
+        }
+
+        private void MessageText_DataContextChanged(FrameworkElement sender,
+                                                    DataContextChangedEventArgs args)
+        {
+            FillInlines(sender as TextBlock);
+        }
+
+        private void FillInlines(TextBlock block)
+        {
+            if (block == null) return;
+
+            var item = block.DataContext as MessageItem;
+
+            block.Inlines.Clear();
+            if (item == null || string.IsNullOrEmpty(item.Text)) return;
+
+            foreach (TextPart part in Links.Split(item.Text))
+            {
+                if (!part.IsLink)
+                {
+                    block.Inlines.Add(new Run { Text = part.Text });
+                    continue;
+                }
+
+                var hyperlink = new Hyperlink();
+                hyperlink.Inlines.Add(new Run { Text = part.Text });
+
+                // A light blue that reads on both bubble colours. The accent the
+                // platform would use by default is the same blue as an outgoing
+                // bubble, which makes a link in one of those invisible.
+                hyperlink.Foreground = LinkBrush;
+
+                // NavigateUri is deliberately not set. Setting it hands the address
+                // to the browser before this gets a say, which is the whole thing
+                // being avoided for t.me links.
+                string url = part.Url;
+                hyperlink.Click += delegate { OpenLink(url); };
+
+                block.Inlines.Add(hyperlink);
+            }
+        }
+
+        private static readonly Brush LinkBrush =
+            new SolidColorBrush(Color.FromArgb(255, 160, 212, 255));
+
+        /// <summary>
+        /// Follows a tapped link: inside the app when it points into Telegram, and
+        /// out to the browser when it does not.
+        /// </summary>
+        private async void OpenLink(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+
+            Lumigram.Tl.TelegramLink link = TelegramLinks.Parse(url);
+
+            if (link == null)
+            {
+                try { await Windows.System.Launcher.LaunchUriAsync(new Uri(url)); }
+                catch (Exception) { SetBusy(false, "That link could not be opened."); }
+
+                return;
+            }
+
+            SetBusy(true, "Opening...");
+
+            try
+            {
+                string trouble = await LinkRouter.OpenAsync(Frame, link);
+                SetBusy(false, trouble ?? "");
+            }
+            catch (RpcException ex) when (TelegramService.IsAuthGone(ex))
+            {
+                if (_poll != null) _poll.Stop();
+
+                await TelegramService.AuthGoneAsync();
+                Frame.Navigate(typeof(QrLoginPage));
+            }
+            catch (Exception ex)
+            {
+                var rpc = ex as RpcException;
+                SetBusy(false, "Could not open that link: " +
+                               (rpc != null ? rpc.ErrorType : ex.Message));
+            }
+        }
+
+        /// <summary>
+        /// Puts the message a link pointed at on screen, and marks it.
+        ///
+        /// The marker matters: the window is centred on the message, so it arrives
+        /// in the middle of a screenful of other messages with nothing to say which
+        /// one was meant. The same bar the unread line uses, for the same reason.
+        /// </summary>
+        private void ShowFocused()
+        {
+            MessageItem target = null;
+            foreach (MessageItem item in _messages)
+            {
+                if (item.Id != _focusId) continue;
+
+                target = item;
+                break;
+            }
+
+            if (target == null)
+            {
+                // The server answered with a window that does not contain it - a
+                // deleted message, most often. The conversation is still the right
+                // place to be, so this says so rather than failing.
+                SetBusy(false, "That message is no longer there.");
+                ScrollToEnd();
+                return;
+            }
+
+            target.FirstUnread = true;
+
+            var ignored = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low,
+                delegate
+                {
+                    MessageList.UpdateLayout();
+                    MessageList.ScrollIntoView(target);
+                });
+        }
+
         private async void LoadThumb(MessageItem item)
         {
             try
@@ -1042,6 +1260,36 @@ namespace LumigramPlus.App
             return element == null ? null : element.DataContext as MessageItem;
         }
 
+        /// <summary>
+        /// Puts this message's t.me address where it can be copied.
+        ///
+        /// Through the same panel as copying text, because the platform has no
+        /// clipboard and the system's text selection is the only way to reach one -
+        /// see the panel's own note in the XAML.
+        /// </summary>
+        private void CopyLinkMenu_Click(object sender, RoutedEventArgs e)
+        {
+            MessageItem item = MenuItem(sender);
+            if (item == null || item.Id == 0 || _peer == null) return;
+
+            // A channel with a username gets the readable form; one without gets the
+            // /c/ form, which only its own members can open - that is a property of
+            // the chat, and it is still the link its members would share.
+            string url = TelegramLinks.ForMessage(
+                _peer.Username,
+                _peer.Kind == "channel" ? _peer.PeerId : 0,
+                item.Id,
+                _topicId);
+
+            if (url == null)
+            {
+                SetBusy(false, "Messages in this chat have no link.");
+                return;
+            }
+
+            ShowCopyPanel(url);
+        }
+
         // ---- copying ---------------------------------------------------------
 
         /// <summary>
@@ -1059,7 +1307,18 @@ namespace LumigramPlus.App
             MessageItem item = MenuItem(sender);
             if (item == null || string.IsNullOrEmpty(item.Text)) return;
 
-            CopyBox.Text = item.Text;
+            ShowCopyPanel(item.Text);
+        }
+
+        /// <summary>
+        /// Shows text selected and ready for the system's copy button.
+        ///
+        /// Shared by copying a message and copying its link: the two differ only in
+        /// what goes in the box.
+        /// </summary>
+        private void ShowCopyPanel(string text)
+        {
+            CopyBox.Text = text ?? "";
             CopyPanel.Visibility = Visibility.Visible;
 
             // Focus first: a selection in an unfocused box draws no handles and no
@@ -1757,7 +2016,17 @@ namespace LumigramPlus.App
         /// </summary>
         private void SkipToEnd_Click(object sender, RoutedEventArgs e)
         {
-            ScrollToEnd();
+            if (_focusId == 0)
+            {
+                ScrollToEnd();
+                return;
+            }
+
+            // Parked on a linked message, so the end is not on screen to scroll to -
+            // it is a different screenful that has to be fetched. Clearing this is
+            // also what lets the poll start adding new messages again.
+            _focusId = 0;
+            Load();
         }
 
         private void ScrollToEnd()

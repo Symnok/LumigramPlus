@@ -24,8 +24,12 @@ namespace Lumigram.Tl
     ///
     /// Deliberately conservative. A false positive turns ordinary words into
     /// something that looks tappable and goes nowhere, which is worse than missing
-    /// an unusual URL: only well-formed http and https addresses, and www. and t.me
-    /// prefixes, are recognised.
+    /// an unusual URL: only well-formed http and https addresses, www. and t.me
+    /// prefixes, and @mentions are recognised.
+    ///
+    /// A mention is a link in exactly the sense that matters here - it names a peer
+    /// and tapping it should open that peer - so it is given the t.me address it is
+    /// shorthand for, and everything above this layer can treat the two alike.
     /// </summary>
     public static class Links
     {
@@ -60,6 +64,7 @@ namespace Lumigram.Tl
 
                 string found = text.Substring(start, length);
                 parts.Add(new TextPart { Text = found, Url = Absolute(found) });
+
 
                 at = start + length;
             }
@@ -112,6 +117,8 @@ namespace Lumigram.Tl
 
         private static int MatchAt(string text, int i)
         {
+            if (text[i] == '@') return MatchMention(text, i);
+
             int length = 0;
 
             if (Starts(text, i, "http://")) length = 7;
@@ -138,6 +145,33 @@ namespace Lumigram.Tl
             return total;
         }
 
+        /// <summary>
+        /// An @mention, and only when the word after the at-sign could really be a
+        /// username.
+        ///
+        /// The check matters more here than anywhere else in this file. An at-sign
+        /// turns up in prose, in handles for other services and in the middle of
+        /// e-mail addresses, and the boundary rule only covers the last of those -
+        /// "name@example.com" is safe because the at-sign is mid-word, but "@ 5pm"
+        /// and "@2026" would both be offered as people to open without this.
+        /// </summary>
+        private static int MatchMention(string text, int i)
+        {
+            int end = i + 1;
+            while (end < text.Length && IsUsernameChar(text[end])) end++;
+
+            int length = end - i;
+            if (length < 2) return 0;
+
+            return TelegramLinks.IsUsername(text.Substring(i + 1, length - 1)) ? length : 0;
+        }
+
+        private static bool IsUsernameChar(char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                   (c >= '0' && c <= '9') || c == '_';
+        }
+
         private static int Count(string text, int from, int to, char c)
         {
             int n = 0;
@@ -161,6 +195,12 @@ namespace Lumigram.Tl
         /// </summary>
         private static string Absolute(string found)
         {
+            // A mention is shorthand for a t.me address, so it is given one. That is
+            // what lets a caller route mentions and pasted links through one path
+            // instead of carrying a second kind of link all the way up.
+            if (found.Length > 1 && found[0] == '@')
+                return "https://t.me/" + found.Substring(1);
+
             if (Starts(found, 0, "http://") || Starts(found, 0, "https://")) return found;
             return "http://" + found;
         }

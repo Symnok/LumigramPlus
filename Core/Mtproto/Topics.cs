@@ -233,6 +233,48 @@ namespace Lumigram.Mtproto
         }
 
         /// <summary>
+        /// Reads a topic's messages around one of them, rather than the newest.
+        ///
+        /// The same window as Messages.GetHistoryAroundAsync, asked of the thread
+        /// instead of the whole group - see there for why add_offset is negative.
+        /// </summary>
+        public static async Task<Messages.History> GetHistoryAroundAsync(MtprotoClient client,
+                                                                         byte[] inputPeer,
+                                                                         int topicId,
+                                                                         int messageId, int count,
+                                                                         ClientInfo info = null)
+        {
+            TlReader r = await client.InvokeAsync(
+                AroundBody(inputPeer, topicId, messageId, count), info);
+
+            TlObject response = TlSchema.ReadObject(r);
+
+            var history = new Messages.History { Senders = Peers.Read(response) };
+            foreach (object o in response.Vec("messages"))
+                history.Messages.Add(Messages.ToTextMessage((TlObject)o));
+
+            return history;
+        }
+
+        /// <summary>The messages.getReplies payload for that window.</summary>
+        public static byte[] AroundBody(byte[] inputPeer, int topicId, int messageId, int count)
+        {
+            var q = new TlWriter(64);
+            q.WriteConstructor(TlConstructors.MessagesGetReplies)
+             .WriteRaw(inputPeer)
+             .WriteInt(topicId)                // msg_id: the thread
+             .WriteInt(messageId)              // offset_id: the message to centre on
+             .WriteInt(0)                      // offset_date
+             .WriteInt(-(count / 2))           // add_offset: step back for newer ones
+             .WriteInt(count)                  // limit
+             .WriteInt(int.MaxValue)           // max_id: no ceiling
+             .WriteInt(0)                      // min_id
+             .WriteLong(0);                    // hash
+
+            return q.ToArray();
+        }
+
+        /// <summary>
         /// Marks a topic read up to <paramref name="maxId"/>.
         ///
         /// Not readHistory: that one takes the channel and clears every topic in it

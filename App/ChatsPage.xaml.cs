@@ -75,6 +75,14 @@ namespace LumigramPlus.App
         /// </summary>
         public bool IsForum { get; set; }
 
+        /// <summary>
+        /// The chat's public name, without its at-sign, or null when it has none.
+        ///
+        /// Carried so a message in this chat can be given a t.me address without
+        /// asking the server what the chat is called all over again.
+        /// </summary>
+        public string Username { get; set; }
+
         // These change while the list is on screen, so each one tells its row about
         // it. Rebuilding the collection instead would flicker every few seconds and
         // throw away the avatars that had been fetched.
@@ -843,6 +851,7 @@ namespace LumigramPlus.App
                 ReadInboxMaxId = d.ReadInboxMaxId,
                 Archived = d.Archived,
                 IsForum = d.IsForum,
+                Username = d.Username,
                 Entry = d,
             };
         }

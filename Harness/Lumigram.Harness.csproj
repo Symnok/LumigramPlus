@@ -154,6 +154,9 @@
     <Compile Include="..\Core\Tl\Links.cs">
       <Link>Core\Tl\Links.cs</Link>
     </Compile>
+    <Compile Include="..\Core\Tl\TelegramLink.cs">
+      <Link>Core\Tl\TelegramLink.cs</Link>
+    </Compile>
     <Compile Include="..\Core\Mtproto\Messages.cs">
       <Link>Core\Mtproto\Messages.cs</Link>
     </Compile>

@@ -25,6 +25,15 @@ namespace LumigramPlus.App
         /// <summary>The forum topic to show, or 0 for the whole chat.</summary>
         public int TopicId;
 
+        /// <summary>
+        /// A message to open at, or 0 for wherever the reading stopped.
+        ///
+        /// Set when a link named one. It changes which history is fetched, not only
+        /// where the list is scrolled: the message may be thousands back, and the
+        /// newest thirty would not contain it.
+        /// </summary>
+        public int FocusMessageId;
+
         /// <summary>Shown in place of the chat title, so the thread is named.</summary>
         public string TopicTitle;
 
