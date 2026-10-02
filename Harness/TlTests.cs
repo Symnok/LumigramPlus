@@ -257,6 +257,95 @@ namespace Lumigram.Harness
                 }
             }
 
+            Section("reactions");
+            {
+                byte[] forum = Messages.InputPeerFor("channel", 555444, 0x1020304050607080L);
+
+                // Putting one on: flags.0 set, then a one-element vector of
+                // reactionEmoji. The emoji is several bytes of UTF-8, which is the
+                // padding case the string tests above exist for.
+                {
+                    var r = new TlReader(Reactions.SendBody(forum, 77, Reactions.ThumbsUp));
+
+                    Eq("react ctor", TlConstructors.MessagesSendReaction, r.ReadConstructor());
+                    Eq("react flags", 1, r.ReadInt());
+                    Eq("react peer", TlConstructors.InputPeerChannel, r.ReadConstructor());
+                    r.ReadLong(); r.ReadLong();
+                    Eq("react id", 77, r.ReadInt());
+                    Eq("react vector", TlConstructors.Vector, r.ReadConstructor());
+                    Eq("react count", 1, r.ReadInt());
+                    Eq("react kind", TlConstructors.ReactionEmoji, r.ReadConstructor());
+                    Eq("react emoji", Reactions.ThumbsUp, r.ReadString());
+                    Eq("react consumed", 0, r.Remaining);
+                }
+
+                // The heart goes out exactly as Telegram spells it: one code point,
+                // no variation selector. The red version most keyboards produce is
+                // refused by the server as an unknown reaction.
+                {
+                    var r = new TlReader(Reactions.SendBody(forum, 78, Reactions.Heart));
+
+                    r.ReadConstructor(); r.ReadInt();
+                    r.ReadConstructor(); r.ReadLong(); r.ReadLong();
+                    r.ReadInt(); r.ReadConstructor(); r.ReadInt(); r.ReadConstructor();
+                    string heart = r.ReadString();
+
+                    Eq("heart is one code point", 1, heart.Length);
+                    Eq("heart code point", 0x2764, (int)heart[0]);
+                }
+
+                // Taking ours off: flags.0 clear and nothing after the id - not an
+                // empty vector, and not a reactionEmpty.
+                {
+                    var r = new TlReader(Reactions.SendBody(forum, 79, null));
+
+                    Eq("unreact ctor", TlConstructors.MessagesSendReaction, r.ReadConstructor());
+                    Eq("unreact flags", 0, r.ReadInt());
+                    r.ReadConstructor(); r.ReadLong(); r.ReadLong();
+                    Eq("unreact id", 79, r.ReadInt());
+                    Eq("unreact consumed", 0, r.Remaining);
+                }
+
+                // Reading them back through the generated schema, which is the path
+                // every message takes. Two counts - one ours - and one custom-emoji
+                // reaction, which must be skipped rather than read as a blank emoji.
+                {
+                    var w = new TlWriter();
+                    w.WriteConstructor(TlConstructors.MessageReactions)
+                     .WriteInt(0)                               // flags
+                     .WriteConstructor(TlConstructors.Vector)
+                     .WriteInt(3);
+
+                    w.WriteConstructor(TlConstructors.ReactionCount)
+                     .WriteInt(1).WriteInt(0)                   // flags.0: chosen_order
+                     .WriteConstructor(TlConstructors.ReactionEmoji)
+                     .WriteString(Reactions.ThumbsUp)
+                     .WriteInt(3);
+
+                    w.WriteConstructor(TlConstructors.ReactionCount)
+                     .WriteInt(0)
+                     .WriteConstructor(TlConstructors.ReactionEmoji)
+                     .WriteString(Reactions.Heart)
+                     .WriteInt(1);
+
+                    w.WriteConstructor(TlConstructors.ReactionCount)
+                     .WriteInt(0)
+                     .WriteConstructor(TlConstructors.ReactionCustomEmoji)
+                     .WriteLong(123456789L)
+                     .WriteInt(5);
+
+                    var read = Reactions.Read(TlSchema.ReadObject(new TlReader(w.ToArray())));
+
+                    Eq("read count", 2, read.Count);
+                    Eq("read first", Reactions.ThumbsUp, read[0].Emoticon);
+                    Eq("read first count", 3, read[0].Count);
+                    Eq("read first mine", true, read[0].Mine);
+                    Eq("read second", Reactions.Heart, read[1].Emoticon);
+                    Eq("read second count", 1, read[1].Count);
+                    Eq("read second mine", false, read[1].Mine);
+                }
+            }
+
             Section("byte strings and padding");
             {
                 // Lengths around every boundary that changes the encoding.

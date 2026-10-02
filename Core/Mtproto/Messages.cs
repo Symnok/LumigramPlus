@@ -19,6 +19,13 @@ namespace Lumigram.Mtproto
         public MediaInfo Media;      // null when the message is text only
 
         /// <summary>
+        /// The emoji reactions on this message, empty when there are none.
+        ///
+        /// Never null, so a caller can count and loop without asking first.
+        /// </summary>
+        public List<MessageReaction> Reactions = new List<MessageReaction>();
+
+        /// <summary>
         /// True for group and channel messages.
         ///
         /// Carried on the message because notification policy depends on it and the
@@ -972,6 +979,9 @@ namespace Lumigram.Mtproto
                 t.IsGroup = peer.Ctor == TlConstructors.PeerChat ||
                             peer.Ctor == TlConstructors.PeerChannel;
             }
+
+            if (m.Has("reactions"))
+                t.Reactions = Lumigram.Mtproto.Reactions.Read(m.Obj("reactions"));
 
             if (m.Has("media"))
             {

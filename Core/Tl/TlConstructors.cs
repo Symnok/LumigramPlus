@@ -245,6 +245,49 @@ namespace Lumigram.Tl
         // media sends no text at all, so the bit has to be set rather than assumed.
         public const uint MessagesEditMessage = 0xb106e66c;
 
+        // ---- reactions -----------------------------------------------------
+        //
+        // A reaction is part of the message it is on, not a message of its own:
+        // sendReaction changes the message, and every client that has it shows the
+        // new count in place.
+
+        // messages.sendReaction#d30d78d4 flags:# big:flags.1?true
+        //   add_to_recent:flags.2?true peer:InputPeer msg_id:int
+        //   reaction:flags.0?Vector<Reaction> = Updates
+        //
+        // flags.0 clear and no vector is how a reaction is taken off.
+        public const uint MessagesSendReaction = 0xd30d78d4;
+
+        // reactionEmoji#1b2286b8 emoticon:string = Reaction
+        public const uint ReactionEmoji = 0x1b2286b8;
+
+        // reactionCustomEmoji#8935fc73 document_id:long = Reaction
+        //
+        // A Premium sticker. Recognised so it can be skipped on purpose: there is
+        // nothing in this client to draw one with.
+        public const uint ReactionCustomEmoji = 0x8935fc73;
+
+        // reactionCount#a3d1cb80 flags:# chosen_order:flags.0?int reaction:Reaction
+        //   count:int = ReactionCount
+        //
+        // chosen_order is present exactly when this account chose it.
+        public const uint ReactionCount = 0xa3d1cb80;
+
+        // messageReactions#a339f0b flags:# ... results:Vector<ReactionCount> ...
+        public const uint MessageReactions = 0x0a339f0b;
+
+        // updateMessageReactions#1e297bfa flags:# peer:Peer msg_id:int
+        //   top_msg_id:flags.0?int saved_peer_id:flags.1?Peer
+        //   reactions:MessageReactions = Update
+        public const uint UpdateMessageReactions = 0x1e297bfa;
+
+        // messages.getAvailableReactions#18dea0ac hash:int = messages.AvailableReactions
+        public const uint MessagesGetAvailableReactions = 0x18dea0ac;
+
+        // availableReaction#c077ec01 flags:# inactive:flags.0?true
+        //   premium:flags.2?true reaction:string title:string ...
+        public const uint AvailableReaction = 0xc077ec01;
+
         // ---- voice calls -------------------------------------------------
 
         // messages.getDhConfig#26cf8950 version:int random_length:int

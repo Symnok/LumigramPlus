@@ -59,6 +59,37 @@ namespace LumigramPlus.App
                 : "Not signed in.";
 
             ShowCacheSize();
+            ShowReactionTest();
+        }
+
+        /// <summary>
+        /// Draws every reaction the picker offers, each with its number, exactly as
+        /// a message would draw it - including the heart's red.
+        /// </summary>
+        private void ShowReactionTest()
+        {
+            ReactionTestText.Inlines.Clear();
+
+            var numberBrush = new Windows.UI.Xaml.Media.SolidColorBrush(
+                Windows.UI.Color.FromArgb(160, 160, 160, 160));
+
+            for (int i = 0; i < ReactionSet.Old.Length; i++)
+            {
+                string emoji = ReactionSet.Old[i];
+
+                ReactionTestText.Inlines.Add(new Windows.UI.Xaml.Documents.Run
+                {
+                    Text = (i + 1) + "\u00A0",
+                    FontSize = 12,
+                    Foreground = numberBrush,
+                });
+
+                ReactionTestText.Inlines.Add(new Windows.UI.Xaml.Documents.Run
+                {
+                    Text = ReactionSet.Display(emoji) + "  ",
+                    Foreground = ReactionSet.BrushFor(emoji),
+                });
+            }
         }
 
         /// <summary>

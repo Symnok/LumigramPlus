@@ -37,6 +37,41 @@ namespace LumigramPlus.App
         Read = 2,
     }
 
+    /// <summary>One reaction as drawn on a bubble.</summary>
+    public sealed class ReactionChip
+    {
+        /// <summary>The bubble it sits on, so a tap knows which message it is for.</summary>
+        public MessageItem Owner { get; set; }
+
+        /// <summary>Exactly as Telegram spells it - this is what a tap sends.</summary>
+        public string Emoticon { get; set; }
+
+        public int Count { get; set; }
+        public bool Mine { get; set; }
+
+        /// <summary>What is drawn, which for the heart is not what is sent.</summary>
+        public string Display { get { return ReactionSet.Display(Emoticon); } }
+
+        public Brush EmojiBrush { get { return ReactionSet.BrushFor(Emoticon); } }
+
+        /// <summary>
+        /// Ours stands out: a lighter chip and a bold count. Both rather than one,
+        /// because either alone is easy to miss on a phone held at arm's length.
+        /// </summary>
+        public Brush ChipBackground { get { return Mine ? MineBrush : OtherBrush; } }
+
+        public Windows.UI.Text.FontWeight CountWeight
+        {
+            get { return Mine ? Windows.UI.Text.FontWeights.Bold : Windows.UI.Text.FontWeights.Normal; }
+        }
+
+        private static readonly Brush MineBrush =
+            new SolidColorBrush(Color.FromArgb(150, 255, 255, 255));
+
+        private static readonly Brush OtherBrush =
+            new SolidColorBrush(Color.FromArgb(55, 255, 255, 255));
+    }
+
     /// <summary>One message in a conversation.</summary>
     public sealed class MessageItem : System.ComponentModel.INotifyPropertyChanged
     {
@@ -76,6 +111,79 @@ namespace LumigramPlus.App
         }
         public string Time { get; set; }
         public bool Out { get; set; }
+
+        private List<MessageReaction> _reactions = new List<MessageReaction>();
+        private List<ReactionChip> _chips = new List<ReactionChip>();
+
+        /// <summary>
+        /// The reactions on this message.
+        ///
+        /// Raises changes, and the chips are rebuilt from it each time, because it
+        /// moves while the message is on screen: our own tap, and other people's
+        /// reactions arriving with the refresh.
+        /// </summary>
+        public List<MessageReaction> Reactions
+        {
+            get { return _reactions; }
+            set
+            {
+                _reactions = value ?? new List<MessageReaction>();
+
+                var chips = new List<ReactionChip>();
+                foreach (MessageReaction r in _reactions)
+                {
+                    if (r.Count <= 0) continue;
+
+                    chips.Add(new ReactionChip
+                    {
+                        Owner = this,
+                        Emoticon = r.Emoticon,
+                        Count = r.Count,
+                        Mine = r.Mine,
+                    });
+                }
+
+                _chips = chips;
+                Raise("Reactions");
+                Raise("ReactionChips");
+                Raise("ReactionsVisibility");
+            }
+        }
+
+        public List<ReactionChip> ReactionChips { get { return _chips; } }
+
+        public Visibility ReactionsVisibility
+        {
+            get { return _chips.Count > 0 ? Visibility.Visible : Visibility.Collapsed; }
+        }
+
+        /// <summary>The reaction this account has on it, or null.</summary>
+        public string MyReaction
+        {
+            get
+            {
+                foreach (MessageReaction r in _reactions)
+                    if (r.Mine) return r.Emoticon;
+
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// A short fingerprint of the reactions, so the refresh can tell whether
+        /// anything changed without rebuilding every bubble's chips every few
+        /// seconds.
+        /// </summary>
+        public static string Signature(List<MessageReaction> reactions)
+        {
+            if (reactions == null || reactions.Count == 0) return "";
+
+            var sb = new System.Text.StringBuilder();
+            foreach (MessageReaction r in reactions)
+                sb.Append(r.Emoticon).Append(r.Count).Append(r.Mine ? "*" : "").Append('|');
+
+            return sb.ToString();
+        }
 
         private MessageTicks _ticks;
 
@@ -856,7 +964,15 @@ namespace LumigramPlus.App
                 for (int i = history.Messages.Count - 1; i >= 0; i--)
                 {
                     TextMessage m = history.Messages[i];
-                    if (m.Id == 0 || Contains(m.Id)) continue;
+                    if (m.Id == 0) continue;
+
+                    if (Contains(m.Id))
+                    {
+                        // Already on screen; only its reactions can have moved.
+                        UpdateReactions(m);
+                        continue;
+                    }
+
                     if (Adopt(m)) continue;
 
                     Add(m);
@@ -946,6 +1062,7 @@ namespace LumigramPlus.App
                 CanLink = _canLink,
                 Ticks = m.Out && m.Id != 0 && m.Id <= _readOutbox
                     ? MessageTicks.Read : MessageTicks.Sent,
+                Reactions = m.Reactions,
             };
 
             if (m.Media != null)
@@ -1416,6 +1533,223 @@ namespace LumigramPlus.App
             ReplyBar.Visibility = Visibility.Visible;
 
             ComposeBox.Focus(FocusState.Programmatic);
+        }
+
+        // ---- reactions --------------------------------------------------------
+
+        /// <summary>The message the picker is open for.</summary>
+        private MessageItem _reactingTo;
+
+        /// <summary>
+        /// Messages with a reaction on its way to the server.
+        ///
+        /// The refresh leaves these alone until the answer comes back. Otherwise a
+        /// poll that happened to land between the tap and the reply would put the
+        /// old reactions back, and the chip would flicker off and on again.
+        /// </summary>
+        private readonly HashSet<int> _reacting = new HashSet<int>();
+
+        private async void ReactMenu_Click(object sender, RoutedEventArgs e)
+        {
+            MessageItem item = MenuItem(sender);
+            if (item == null || item.Id == 0) return;
+
+            _reactingTo = item;
+            ReactGrid.Children.Clear();
+            RemoveReactionButton.Visibility = item.MyReaction != null
+                ? Visibility.Visible : Visibility.Collapsed;
+            ReactPanel.Visibility = Visibility.Visible;
+
+            List<string> offered;
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+                offered = await ReactionSet.OfferedAsync(client);
+            }
+            catch (Exception)
+            {
+                offered = new List<string>(ReactionSet.Old);
+            }
+
+            // The panel may have been closed while the list was being fetched.
+            if (_reactingTo != item) return;
+
+            string mine = item.MyReaction;
+
+            foreach (string emoji in offered)
+            {
+                string chosen = emoji;
+
+                var face = new TextBlock
+                {
+                    Text = ReactionSet.Display(emoji),
+                    Foreground = ReactionSet.BrushFor(emoji),
+                    IsColorFontEnabled = true,
+                    FontSize = 30,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+
+                var button = new Button
+                {
+                    Content = face,
+                    Width = 60,
+                    Height = 60,
+                    MinWidth = 0,
+                    MinHeight = 0,
+                    Padding = new Thickness(0),
+                    BorderThickness = new Thickness(emoji == mine ? 2 : 0),
+                };
+
+                button.Click += delegate { CloseReact(); React(item, chosen); };
+                ReactGrid.Children.Add(button);
+            }
+        }
+
+        private void RemoveReaction_Click(object sender, RoutedEventArgs e)
+        {
+            MessageItem item = _reactingTo;
+            CloseReact();
+
+            if (item != null && item.MyReaction != null) React(item, item.MyReaction);
+        }
+
+        private void CancelReact_Click(object sender, RoutedEventArgs e)
+        {
+            CloseReact();
+        }
+
+        private void CloseReact()
+        {
+            _reactingTo = null;
+            ReactPanel.Visibility = Visibility.Collapsed;
+            ReactGrid.Children.Clear();
+        }
+
+        /// <summary>A tap on a chip in a bubble: the same as choosing it in the picker.</summary>
+        private void ReactionChip_Tapped(object sender, Windows.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            var element = sender as FrameworkElement;
+            var chip = element == null ? null : element.DataContext as ReactionChip;
+            if (chip == null || chip.Owner == null || chip.Owner.Id == 0) return;
+
+            // Kept from reaching the bubble, whose own tap handling is for pictures.
+            e.Handled = true;
+
+            React(chip.Owner, chip.Emoticon);
+        }
+
+        /// <summary>
+        /// Puts a reaction on, moves it, or takes it off.
+        ///
+        /// Choosing the reaction already ours takes it off - Telegram's own rule,
+        /// and the only way off for anyone who reaches it by tapping the chip.
+        /// Choosing another moves ours there: without Premium an account has one
+        /// reaction per message, so a second does not join the first, it replaces
+        /// it.
+        ///
+        /// Shown at once and sent after, then corrected by what the server says
+        /// the reactions now are. If it refuses, the old ones are put back and the
+        /// reason is said - most often a chat that has limited which reactions it
+        /// takes.
+        /// </summary>
+        private async void React(MessageItem item, string emoticon)
+        {
+            if (item == null || item.Id == 0 || string.IsNullOrEmpty(emoticon)) return;
+            if (_reacting.Contains(item.Id)) return;
+
+            List<MessageReaction> before = item.Reactions;
+            string mine = item.MyReaction;
+            string sending = emoticon == mine ? null : emoticon;
+
+            item.Reactions = Toggled(before, mine, sending);
+            _reacting.Add(item.Id);
+
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                List<MessageReaction> now = await Reactions.SendAsync(
+                    client, _inputPeer, item.Id, sending, TelegramService.Info);
+
+                if (now != null) item.Reactions = now;
+                SetBusy(false, "");
+            }
+            catch (Exception ex)
+            {
+                item.Reactions = before;
+
+                var rpc = ex as RpcException;
+                string trouble = rpc != null ? rpc.ErrorType : ex.Message;
+
+                if (trouble != null && trouble.Contains("REACTION_INVALID"))
+                    trouble = "This chat does not take that reaction.";
+                else if (trouble != null && trouble.Contains("REACTION_EMPTY"))
+                    trouble = "";
+                else
+                    trouble = "Reaction not sent: " + trouble;
+
+                SetBusy(false, trouble);
+            }
+            finally
+            {
+                _reacting.Remove(item.Id);
+            }
+        }
+
+        /// <summary>
+        /// What the reactions will be once ours has moved, worked out here so the
+        /// bubble can show it before the server answers.
+        /// </summary>
+        private static List<MessageReaction> Toggled(List<MessageReaction> before,
+                                                     string removing, string adding)
+        {
+            var after = new List<MessageReaction>();
+            bool added = false;
+
+            foreach (MessageReaction r in before)
+            {
+                var copy = new MessageReaction { Emoticon = r.Emoticon, Count = r.Count, Mine = r.Mine };
+
+                if (removing != null && copy.Emoticon == removing && copy.Mine)
+                {
+                    copy.Count--;
+                    copy.Mine = false;
+                }
+
+                if (adding != null && copy.Emoticon == adding)
+                {
+                    copy.Count++;
+                    copy.Mine = true;
+                    added = true;
+                }
+
+                if (copy.Count > 0) after.Add(copy);
+            }
+
+            if (adding != null && !added)
+                after.Add(new MessageReaction { Emoticon = adding, Count = 1, Mine = true });
+
+            return after;
+        }
+
+        /// <summary>
+        /// Brings an on-screen message's reactions up to date from the refresh.
+        ///
+        /// Compared first, so a poll that changes nothing - nearly all of them -
+        /// touches nothing, and the chips of a bubble are only rebuilt when
+        /// somebody actually reacted.
+        /// </summary>
+        private void UpdateReactions(TextMessage m)
+        {
+            if (_reacting.Contains(m.Id)) return;
+
+            MessageItem item = FindItem(m.Id);
+            if (item == null) return;
+
+            if (MessageItem.Signature(item.Reactions) == MessageItem.Signature(m.Reactions)) return;
+
+            item.Reactions = m.Reactions;
         }
 
         /// <summary>

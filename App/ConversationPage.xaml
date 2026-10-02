@@ -61,6 +61,9 @@
                                     <MenuFlyoutItem Text="reply"
                                                     Visibility="{Binding ActionVisibility}"
                                                     Click="ReplyMenu_Click"/>
+                                    <MenuFlyoutItem Text="react..."
+                                                    Visibility="{Binding ActionVisibility}"
+                                                    Click="ReactMenu_Click"/>
                                     <!-- Own messages with words in them: see
                                          MessageItem.EditVisibility. -->
                                     <MenuFlyoutItem Text="edit"
@@ -141,6 +144,51 @@
                                            FontSize="{StaticResource AppBodyFontSize}"
                                            Loaded="MessageText_Loaded"
                                            Visibility="{Binding TextVisibility}"/>
+                                <!--
+                                  Reactions, inside the bubble: they belong to the
+                                  message, and a reaction drawn outside it would read
+                                  as a reply to it.
+
+                                  A horizontal row rather than a wrapping one. The
+                                  wrapping panels this platform has need cells of one
+                                  size, and "a 3" and "a 128" are not; a message
+                                  rarely carries more than a few kinds of reaction.
+
+                                  Tapping one is the shortcut Telegram has: the same
+                                  reaction again takes it off, another one moves ours
+                                  there.
+                                -->
+                                <ItemsControl ItemsSource="{Binding ReactionChips}"
+                                              Visibility="{Binding ReactionsVisibility}"
+                                              Margin="0,6,0,0">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding ChipBackground}"
+                                                    CornerRadius="11" Padding="8,1,8,2"
+                                                    Margin="0,0,6,0"
+                                                    Tapped="ReactionChip_Tapped">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Display}"
+                                                               Foreground="{Binding EmojiBrush}"
+                                                               IsColorFontEnabled="True"
+                                                               FontSize="{StaticResource AppSubtleFontSize}"/>
+                                                    <TextBlock Text="{Binding Count}"
+                                                               Foreground="White"
+                                                               FontWeight="{Binding CountWeight}"
+                                                               FontSize="{StaticResource AppCaptionFontSize}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="5,0,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
                                 <!--
                                   The time, and for our own messages how far they
                                   have got.
@@ -335,6 +383,40 @@
 
                 <Button Grid.Row="2" Content="cancel" HorizontalAlignment="Stretch"
                         Margin="0,8,0,0" Click="CancelForward_Click"/>
+            </Grid>
+        </Border>
+
+        <!--
+          Choosing a reaction.
+
+          Built in code from ReactionSet: only the old emoji, which the phone's
+          font can draw, narrowed by what the server accepts. A wrapping grid of
+          equal cells, which is what VariableSizedWrapGrid is good at - every cell
+          here is one emoji.
+        -->
+        <Border x:Name="ReactPanel" Grid.RowSpan="4" Visibility="Collapsed"
+                Background="{ThemeResource PhoneBackgroundBrush}">
+            <Grid Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="react" FontSize="20" Margin="0,0,0,8"/>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <VariableSizedWrapGrid x:Name="ReactGrid" Orientation="Horizontal"
+                                           ItemWidth="64" ItemHeight="64"/>
+                </ScrollViewer>
+
+                <Button x:Name="RemoveReactionButton" Grid.Row="2"
+                        Content="remove my reaction" HorizontalAlignment="Stretch"
+                        Margin="0,8,0,0" Click="RemoveReaction_Click"/>
+
+                <Button Grid.Row="3" Content="cancel" HorizontalAlignment="Stretch"
+                        Margin="0,4,0,0" Click="CancelReact_Click"/>
             </Grid>
         </Border>
 
