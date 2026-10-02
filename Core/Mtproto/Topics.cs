@@ -218,11 +218,7 @@ namespace Lumigram.Mtproto
             TlReader r = await client.InvokeAsync(HistoryBody(inputPeer, topicId, count), info);
             TlObject response = TlSchema.ReadObject(r);
 
-            var history = new Messages.History { Senders = Peers.Read(response) };
-            foreach (object o in response.Vec("messages"))
-                history.Messages.Add(Messages.ToTextMessage((TlObject)o));
-
-            return history;
+            return Messages.ReadHistory(response);
         }
 
         /// <summary>
@@ -264,11 +260,7 @@ namespace Lumigram.Mtproto
 
             TlObject response = TlSchema.ReadObject(r);
 
-            var history = new Messages.History { Senders = Peers.Read(response) };
-            foreach (object o in response.Vec("messages"))
-                history.Messages.Add(Messages.ToTextMessage((TlObject)o));
-
-            return history;
+            return Messages.ReadHistory(response);
         }
 
         /// <summary>The messages.getReplies payload for that window.</summary>
@@ -281,6 +273,40 @@ namespace Lumigram.Mtproto
              .WriteInt(messageId)              // offset_id: the message to centre on
              .WriteInt(0)                      // offset_date
              .WriteInt(-(count / 2))           // add_offset: step back for newer ones
+             .WriteInt(count)                  // limit
+             .WriteInt(int.MaxValue)           // max_id: no ceiling
+             .WriteInt(0)                      // min_id
+             .WriteLong(0);                    // hash
+
+            return q.ToArray();
+        }
+
+        /// <summary>
+        /// Reads the page of a topic's messages older than one - the same as
+        /// Messages.GetHistoryBeforeAsync, asked of the thread.
+        /// </summary>
+        public static async Task<Messages.History> GetHistoryBeforeAsync(MtprotoClient client,
+                                                                         byte[] inputPeer,
+                                                                         int topicId,
+                                                                         int beforeId, int count,
+                                                                         ClientInfo info = null)
+        {
+            TlReader r = await client.InvokeAsync(
+                BeforeBody(inputPeer, topicId, beforeId, count), info);
+
+            return Messages.ReadHistory(TlSchema.ReadObject(r));
+        }
+
+        /// <summary>The messages.getReplies payload for the page before a message.</summary>
+        public static byte[] BeforeBody(byte[] inputPeer, int topicId, int beforeId, int count)
+        {
+            var q = new TlWriter(64);
+            q.WriteConstructor(TlConstructors.MessagesGetReplies)
+             .WriteRaw(inputPeer)
+             .WriteInt(topicId)                // msg_id: the thread
+             .WriteInt(beforeId)               // offset_id: older than this
+             .WriteInt(0)                      // offset_date
+             .WriteInt(0)                      // add_offset: nothing newer
              .WriteInt(count)                  // limit
              .WriteInt(int.MaxValue)           // max_id: no ceiling
              .WriteInt(0)                      // min_id

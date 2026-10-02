@@ -1,0 +1,66 @@
+<Page
+    x:Class="LumigramPlus.App.AudioPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid Margin="16,24,16,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,8">
+            <TextBlock Text="LUMIGRAM+" FontSize="14" Opacity="0.6"/>
+            <TextBlock Text="audio" FontSize="30"/>
+        </StackPanel>
+
+        <!-- What is playing. The artist is optional: plenty of files have only a
+             name, and an empty second line is better than "unknown artist". -->
+        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+            <TextBlock x:Name="TrackTitle" TextWrapping="Wrap" FontSize="26"
+                       TextAlignment="Center"/>
+            <TextBlock x:Name="TrackPerformer" TextWrapping="Wrap" Opacity="0.7"
+                       FontSize="18" TextAlignment="Center" Margin="0,6,0,0"/>
+        </StackPanel>
+
+        <!--
+          Where in the track, and a way to get somewhere else in it.
+
+          A slider of its own rather than the MediaElement's built-in controls:
+          those are drawn inside the element, and an audio-only element has no size
+          of its own to draw them in - they come out cramped, or not at all.
+        -->
+        <Slider x:Name="Position" Grid.Row="2" Minimum="0" Maximum="1"
+                StepFrequency="1" IsThumbToolTipEnabled="False"
+                ValueChanged="Position_ValueChanged"/>
+
+        <Grid Grid.Row="3">
+            <TextBlock x:Name="Elapsed" Text="0:00" Opacity="0.7"
+                       HorizontalAlignment="Left"/>
+            <TextBlock x:Name="Total" Text="" Opacity="0.7"
+                       HorizontalAlignment="Right"/>
+        </Grid>
+
+        <TextBlock x:Name="StatusText" Grid.Row="4" TextWrapping="Wrap" Opacity="0.7"
+                   FontSize="14" Margin="0,12,0,0"/>
+
+        <!-- Sound only; nothing to see. Zero-sized and still in the tree, because
+             a MediaElement that is not in the visual tree does not play. -->
+        <MediaElement x:Name="Player" Width="0" Height="0" AutoPlay="True"
+                      MediaOpened="Player_Opened" MediaEnded="Player_Ended"
+                      MediaFailed="Player_Failed"
+                      CurrentStateChanged="Player_StateChanged"/>
+    </Grid>
+
+    <Page.BottomAppBar>
+        <CommandBar>
+            <AppBarButton x:Name="PlayButton" Icon="Pause" Label="pause"
+                          Click="PlayPause_Click"/>
+            <AppBarButton Icon="Previous" Label="restart" Click="Restart_Click"/>
+        </CommandBar>
+    </Page.BottomAppBar>
+</Page>

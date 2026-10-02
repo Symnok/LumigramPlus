@@ -26,6 +26,26 @@ namespace Lumigram.Mtproto
         public List<MessageReaction> Reactions = new List<MessageReaction>();
 
         /// <summary>
+        /// The message this one answers, or 0 when it answers nothing.
+        ///
+        /// Zero for a message that merely belongs to a forum topic, which on the
+        /// wire looks like a reply to the topic itself - see Messages.ReadReply.
+        /// </summary>
+        public int ReplyToId;
+
+        /// <summary>
+        /// The part of the original the sender chose to quote, or null when they
+        /// replied to the whole message.
+        /// </summary>
+        public string ReplyQuote;
+
+        /// <summary>
+        /// True when the original is in another chat. Its id means nothing here,
+        /// so there is nothing to look up - only the quote, if there is one.
+        /// </summary>
+        public bool ReplyElsewhere;
+
+        /// <summary>
         /// True for group and channel messages.
         ///
         /// Carried on the message because notification policy depends on it and the
@@ -471,6 +491,84 @@ namespace Lumigram.Mtproto
 
             /// <summary>Sender id to who they are. Empty for a one-to-one chat.</summary>
             public Dictionary<long, PeerInfo> Senders = new Dictionary<long, PeerInfo>();
+
+            /// <summary>
+            /// True when the server sent the whole history rather than a page of it.
+            ///
+            /// It answers with messages.messages when that is everything there is,
+            /// and with a slice when it held some back - so this is the server's own
+            /// answer to "is there anything older", not a guess from the count.
+            /// </summary>
+            public bool Complete;
+
+            /// <summary>
+            /// Whether asking for an older page could return anything.
+            ///
+            /// The count matters as well as the shape: a page that came back short
+            /// of what was asked for has reached the start, whatever type it was.
+            /// </summary>
+            public bool HasOlder(int asked)
+            {
+                return !Complete && Messages.Count >= asked;
+            }
+        }
+
+        /// <summary>
+        /// Turns any messages.Messages reply into a History.
+        ///
+        /// One place, because there are four ways of asking - newest, around a
+        /// message, before a message, and each of those again inside a topic - and
+        /// they all answer in the same shapes.
+        /// </summary>
+        public static History ReadHistory(TlObject response)
+        {
+            var history = new History
+            {
+                Senders = Peers.Read(response),
+                Complete = response.Ctor == TlConstructors.MessagesMessages,
+            };
+
+            foreach (object o in response.Vec("messages"))
+                history.Messages.Add(ToTextMessage((TlObject)o));
+
+            return history;
+        }
+
+        /// <summary>
+        /// Reads the page of messages older than one, newest of them first.
+        ///
+        /// How a conversation goes further back: offset_id is the oldest message
+        /// already shown, and getHistory answers with the ones before it. Unlike
+        /// the window around a message, add_offset is zero - nothing newer than the
+        /// offset is wanted, because all of that is already on screen.
+        /// </summary>
+        public static async Task<History> GetHistoryBeforeAsync(MtprotoClient client,
+                                                                byte[] inputPeer, int beforeId,
+                                                                int count,
+                                                                ClientInfo info = null)
+        {
+            TlReader r = await client.InvokeAsync(BeforeBody(inputPeer, beforeId, count), info);
+            return ReadHistory(TlSchema.ReadObject(r));
+        }
+
+        /// <summary>
+        /// The messages.getHistory payload for the page before a message, separated
+        /// so it can be checked without a connection.
+        /// </summary>
+        public static byte[] BeforeBody(byte[] inputPeer, int beforeId, int count)
+        {
+            var q = new TlWriter(64);
+            q.WriteConstructor(TlConstructors.MessagesGetHistory)
+             .WriteRaw(inputPeer)
+             .WriteInt(beforeId)                // offset_id: older than this
+             .WriteInt(0)                       // offset_date
+             .WriteInt(0)                       // add_offset: nothing newer
+             .WriteInt(count)                   // limit
+             .WriteInt(0)                       // max_id
+             .WriteInt(0)                       // min_id
+             .WriteLong(0);                     // hash
+
+            return q.ToArray();
         }
 
         /// <summary>
@@ -496,11 +594,7 @@ namespace Lumigram.Mtproto
             TlReader r = await client.InvokeAsync(q.ToArray(), info);
             TlObject response = TlSchema.ReadObject(r);
 
-            var history = new History { Senders = Peers.Read(response) };
-            foreach (object o in response.Vec("messages"))
-                history.Messages.Add(ToTextMessage((TlObject)o));
-
-            return history;
+            return ReadHistory(response);
         }
 
         /// <summary>
@@ -525,11 +619,7 @@ namespace Lumigram.Mtproto
 
             TlObject response = TlSchema.ReadObject(r);
 
-            var history = new History { Senders = Peers.Read(response) };
-            foreach (object o in response.Vec("messages"))
-                history.Messages.Add(ToTextMessage((TlObject)o));
-
-            return history;
+            return ReadHistory(response);
         }
 
         /// <summary>
@@ -983,6 +1073,8 @@ namespace Lumigram.Mtproto
             if (m.Has("reactions"))
                 t.Reactions = Lumigram.Mtproto.Reactions.Read(m.Obj("reactions"));
 
+            if (m.Has("reply_to")) ReadReply(m.Obj("reply_to"), t);
+
             if (m.Has("media"))
             {
                 t.Media = Lumigram.Mtproto.Media.FromMessage(m);
@@ -992,6 +1084,81 @@ namespace Lumigram.Mtproto
             if (m.Has("reply_to")) t.Note = (t.Note == null ? "" : t.Note + ", ") + "reply";
 
             return t;
+        }
+
+        /// <summary>
+        /// Reads what a message is a reply to.
+        ///
+        /// In a forum every message carries a reply header, because joining a topic
+        /// is done by replying to it: a plain message in topic 12 says
+        /// "reply to 12, forum_topic". Treated as a reply, every message in a topic
+        /// would quote the topic's creation notice. The way to tell is the topic
+        /// field: a real reply inside a topic names the message it answers *and*
+        /// the topic it is in, where mere membership names only the one id.
+        ///
+        /// Public so it can be tested without building a whole message.
+        /// </summary>
+        public static void ReadReply(TlObject header, TextMessage t)
+        {
+            if (header == null || header.Ctor != TlConstructors.MessageReplyHeader) return;
+
+            bool forumTopic = header.Flag("flags", TlConstructors.MessageReplyHeaderForumTopicBit);
+            int replyTo = header.IntOr("reply_to_msg_id", 0);
+            int topId = header.IntOr("reply_to_top_id", 0);
+
+            t.ReplyToId = forumTopic && topId == 0 ? 0 : replyTo;
+            t.ReplyElsewhere = header.Has("reply_to_peer_id");
+            t.ReplyQuote = SafeStr(header, "quote_text");
+
+            // A reply to another chat with no id here and no quote still is one.
+            if (t.ReplyElsewhere) t.ReplyToId = 0;
+        }
+
+        /// <summary>
+        /// Fetches particular messages by id, for showing what a reply answers when
+        /// the original is not among the ones already loaded.
+        /// </summary>
+        public static async Task<History> GetByIdAsync(MtprotoClient client, string kind,
+                                                       long peerId, long accessHash,
+                                                       IList<int> ids, ClientInfo info = null)
+        {
+            TlReader r = await client.InvokeAsync(
+                ByIdBody(kind, peerId, accessHash, ids), info);
+
+            return ReadHistory(TlSchema.ReadObject(r));
+        }
+
+        /// <summary>
+        /// The payload for fetching messages by id.
+        ///
+        /// Two different requests behind one name, and the choice is the thing worth
+        /// testing: a channel's message ids are its own, so asking
+        /// messages.getMessages for channel message 391 returns the account's
+        /// message 391 from some other chat entirely - a quote of the wrong text,
+        /// which is worse than no quote.
+        /// </summary>
+        public static byte[] ByIdBody(string kind, long peerId, long accessHash, IList<int> ids)
+        {
+            var q = new TlWriter(32 + ids.Count * 8);
+
+            if (kind == "channel")
+            {
+                q.WriteConstructor(TlConstructors.ChannelsGetMessages)
+                 .WriteRaw(InputChannel(peerId, accessHash));
+            }
+            else
+            {
+                q.WriteConstructor(TlConstructors.MessagesGetMessages);
+            }
+
+            q.WriteConstructor(TlConstructors.Vector).WriteInt(ids.Count);
+            foreach (int id in ids)
+            {
+                q.WriteConstructor(TlConstructors.InputMessageID)
+                 .WriteInt(id);
+            }
+
+            return q.ToArray();
         }
 
         private static string PeerKey(TlObject peer)

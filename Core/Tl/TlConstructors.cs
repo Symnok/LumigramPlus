@@ -288,6 +288,31 @@ namespace Lumigram.Tl
         //   premium:flags.2?true reaction:string title:string ...
         public const uint AvailableReaction = 0xc077ec01;
 
+        // ---- replies ---------------------------------------------------------
+
+        // messageReplyHeader#1b97dd66 flags:# ... forum_topic:flags.3?true ...
+        //   reply_to_msg_id:flags.4?int reply_to_peer_id:flags.0?Peer ...
+        //   reply_to_top_id:flags.1?int quote_text:flags.6?string ...
+        //
+        // forum_topic is a true-flag: read as bit 3 of the flags word.
+        public const uint MessageReplyHeader = 0x1b97dd66;
+        public const int MessageReplyHeaderForumTopicBit = 3;
+
+        // messages.getMessages#63c66506 id:Vector<InputMessage> = messages.Messages
+        //
+        // For one-to-one chats and basic groups, whose message ids belong to the
+        // account rather than to the chat - so no peer is named.
+        public const uint MessagesGetMessages = 0x63c66506;
+
+        // channels.getMessages#ad8c9a23 channel:InputChannel id:Vector<InputMessage>
+        //
+        // For channels and supergroups, whose ids are their own; asking
+        // messages.getMessages for one of those finds a different message.
+        public const uint ChannelsGetMessages = 0xad8c9a23;
+
+        // inputMessageID#a676a322 id:int = InputMessage
+        public const uint InputMessageID = 0xa676a322;
+
         // ---- voice calls -------------------------------------------------
 
         // messages.getDhConfig#26cf8950 version:int random_length:int

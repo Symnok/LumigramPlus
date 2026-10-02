@@ -26,6 +26,23 @@
           it in another one and disabling its own leaves nothing for it to move.
         -->
         <ListView x:Name="MessageList" Grid.Row="2" SelectionMode="None">
+            <!--
+              Going further back, at the top of the conversation, where the reader
+              already is when they want it: scrolling up to the oldest message on
+              screen and finding the way to the ones before it right there.
+
+              The button while there is more, the bar while a page is on its way,
+              and nothing once the server has said this is the beginning.
+            -->
+            <ListView.Header>
+                <StackPanel Margin="0,4,0,8">
+                    <Button x:Name="OlderButton" Content="older messages"
+                            HorizontalAlignment="Center" Visibility="Collapsed"
+                            Click="Older_Click"/>
+                    <ProgressBar x:Name="OlderBusy" IsIndeterminate="True"
+                                 Visibility="Collapsed" Margin="0,8,0,8"/>
+                </StackPanel>
+            </ListView.Header>
             <ListView.ItemContainerStyle>
                     <Style TargetType="ListViewItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -103,6 +120,26 @@
                                            Visibility="{Binding SenderVisibility}"
                                            FontSize="{StaticResource AppSubtleFontSize}"
                                            Opacity="0.8" Margin="0,0,0,2"/>
+                                <!--
+                                  What this message answers, as Symbigram shows it:
+                                  "Name: the start of what they said", one line, in
+                                  the pale blue Symbigram uses, with a bar down the
+                                  left so it reads as a quotation and not as part of
+                                  this message.
+
+                                  Tapping it goes to the original when that is on
+                                  screen.
+                                -->
+                                <Border Visibility="{Binding ReplyVisibility}"
+                                        BorderBrush="#FFB8D8F0" BorderThickness="2,0,0,0"
+                                        Padding="6,0,0,0" Margin="0,0,0,4"
+                                        Background="Transparent"
+                                        Tapped="ReplyQuote_Tapped">
+                                    <TextBlock Text="{Binding ReplyText}" Foreground="#FFB8D8F0"
+                                               TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis"
+                                               FontSize="{StaticResource AppSubtleFontSize}"/>
+                                </Border>
                                 <!-- Tapping the caption is what fetches the picture,
                                      so it stays tappable after one is shown too. -->
                                 <TextBlock Text="{Binding MediaNote}"
@@ -524,6 +561,8 @@
                  is wanted after a scroll back rather than while typing. -->
             <CommandBar.SecondaryCommands>
                 <AppBarButton Label="skip to end" Click="SkipToEnd_Click"/>
+                <AppBarButton x:Name="OlderMenuItem" Label="load older messages"
+                              Click="Older_Click"/>
             </CommandBar.SecondaryCommands>
         </CommandBar>
     </Page.BottomAppBar>

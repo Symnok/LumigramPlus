@@ -43,6 +43,8 @@ namespace LumigramPlus.App
                 StorageFolder folder = await ApplicationData.Current.LocalFolder
                     .CreateFolderAsync(Folder, CreationCollisionOption.OpenIfExists);
 
+                await AdoptOldCopyAsync(folder, info);
+
                 try
                 {
                     await folder.GetFileAsync(name);
@@ -183,6 +185,35 @@ namespace LumigramPlus.App
         }
 
         /// <summary>
+        /// Renames an audio file downloaded before audio had a kind of its own.
+        ///
+        /// Those were stored as "id.bin", like every other document. The bytes are
+        /// exactly the MP3 they always were, so a rename is all it takes - and it
+        /// spares downloading the same track again just because its name changed.
+        /// </summary>
+        private static async Task AdoptOldCopyAsync(StorageFolder folder, MediaInfo info)
+        {
+            if (info.Kind != MediaKind.Audio) return;
+
+            string current = Name(info);
+            string old = info.Id.ToString("x16") + ".bin";
+            if (current == old) return;
+
+            StorageFile file;
+            try { file = await folder.GetFileAsync(old); }
+            catch (Exception) { return; }      // nothing old to adopt
+
+            try
+            {
+                await file.RenameAsync(current, NameCollisionOption.ReplaceExisting);
+            }
+            catch (Exception)
+            {
+                // Left as it is: the worst case is downloading the track again.
+            }
+        }
+
+        /// <summary>
         /// Removes a file that was created for a download which then did not
         /// finish, so the next look fetches it again instead of showing nothing.
         /// </summary>
@@ -204,6 +235,7 @@ namespace LumigramPlus.App
                 StorageFolder folder = await ApplicationData.Current.LocalFolder
                     .GetFolderAsync(Folder);
 
+                await AdoptOldCopyAsync(folder, info);
                 return await folder.GetFileAsync(Name(info));
             }
             catch (Exception)
@@ -219,8 +251,12 @@ namespace LumigramPlus.App
         /// </summary>
         private static string Name(MediaInfo info)
         {
+            // Audio gets its real extension, because the player decides what a file
+            // is partly from its name and refuses an MP3 called ".bin".
             string extension = info.Kind == MediaKind.Photo ? ".jpg"
                              : info.Kind == MediaKind.Video ? ".mp4"
+                             : info.Kind == MediaKind.Audio
+                                 ? (Media.PlayableExtension(info) ?? ".bin")
                              : ".bin";
 
             return info.Id.ToString("x16") + extension;

@@ -346,6 +346,188 @@ namespace Lumigram.Harness
                 }
             }
 
+            Section("replies");
+            {
+                // An ordinary reply: just the message it answers.
+                {
+                    var t = Reply(1 << 4, 391, 0, false, null);
+                    Eq("plain reply", 391, t.ReplyToId);
+                    Eq("plain not elsewhere", false, t.ReplyElsewhere);
+                    Eq("plain no quote", null, t.ReplyQuote);
+                }
+
+                // A plain message in forum topic 12 looks like a reply to 12. It is
+                // not one, and must not quote the topic's creation notice.
+                {
+                    var t = Reply((1 << 4) | (1 << 3), 12, 0, false, null);
+                    Eq("topic membership is not a reply", 0, t.ReplyToId);
+                }
+
+                // A real reply inside that topic names both the message and the topic.
+                {
+                    var t = Reply((1 << 4) | (1 << 3) | (1 << 1), 391, 12, false, null);
+                    Eq("reply inside a topic", 391, t.ReplyToId);
+                }
+
+                // The sender quoted part of the original: that part is what is shown.
+                {
+                    var t = Reply((1 << 4) | (1 << 6), 391, 0, false, "just this bit");
+                    Eq("quote id", 391, t.ReplyToId);
+                    Eq("quote text", "just this bit", t.ReplyQuote);
+                }
+
+                // An original in another chat: its id means nothing here.
+                {
+                    var t = Reply((1 << 4) | (1 << 0) | (1 << 6), 77, 0, true, "from over there");
+                    Eq("elsewhere", true, t.ReplyElsewhere);
+                    Eq("elsewhere has no local id", 0, t.ReplyToId);
+                    Eq("elsewhere keeps its quote", "from over there", t.ReplyQuote);
+                }
+
+                // Fetching originals: a channel's ids are its own, so it has to be
+                // asked through channels.getMessages with the channel named.
+                {
+                    var r = new TlReader(Messages.ByIdBody("channel", 555444,
+                        0x1020304050607080L, new[] { 10, 20 }));
+
+                    Eq("by id channel ctor", TlConstructors.ChannelsGetMessages, r.ReadConstructor());
+                    Eq("by id channel", TlConstructors.InputChannel, r.ReadConstructor());
+                    Eq("by id channel id", 555444L, r.ReadLong());
+                    r.ReadLong();
+                    Eq("by id vector", TlConstructors.Vector, r.ReadConstructor());
+                    Eq("by id count", 2, r.ReadInt());
+                    Eq("by id first", TlConstructors.InputMessageID, r.ReadConstructor());
+                    Eq("by id first id", 10, r.ReadInt());
+                    Eq("by id second", TlConstructors.InputMessageID, r.ReadConstructor());
+                    Eq("by id second id", 20, r.ReadInt());
+                    Eq("by id consumed", 0, r.Remaining);
+                }
+
+                // ...and anything else through messages.getMessages, with no peer.
+                {
+                    var r = new TlReader(Messages.ByIdBody("user", 999, 1L, new[] { 5 }));
+
+                    Eq("by id user ctor", TlConstructors.MessagesGetMessages, r.ReadConstructor());
+                    Eq("by id user vector", TlConstructors.Vector, r.ReadConstructor());
+                    Eq("by id user count", 1, r.ReadInt());
+                    r.ReadConstructor();
+                    Eq("by id user id", 5, r.ReadInt());
+                    Eq("by id user consumed", 0, r.Remaining);
+                }
+            }
+
+            Section("older messages");
+            {
+                byte[] chat = Messages.InputPeerFor("channel", 555444, 0x1020304050607080L);
+
+                // The page before a message: offset_id is the oldest on screen and
+                // add_offset is zero. A negative add_offset here - which is what the
+                // window around a linked message uses - would send back messages
+                // that are already on screen.
+                {
+                    var r = new TlReader(Messages.BeforeBody(chat, 5000, 30));
+
+                    Eq("older ctor", TlConstructors.MessagesGetHistory, r.ReadConstructor());
+                    r.ReadConstructor(); r.ReadLong(); r.ReadLong();
+                    Eq("older offset_id", 5000, r.ReadInt());
+                    Eq("older offset_date", 0, r.ReadInt());
+                    Eq("older add_offset", 0, r.ReadInt());
+                    Eq("older limit", 30, r.ReadInt());
+                    Eq("older max_id", 0, r.ReadInt());
+                    Eq("older min_id", 0, r.ReadInt());
+                    Eq("older hash", 0L, r.ReadLong());
+                    Eq("older consumed", 0, r.Remaining);
+                }
+
+                // Inside a topic: the thread first, then the same offsets.
+                {
+                    var r = new TlReader(Topics.BeforeBody(chat, 12, 5000, 30));
+
+                    Eq("topic older ctor", TlConstructors.MessagesGetReplies, r.ReadConstructor());
+                    r.ReadConstructor(); r.ReadLong(); r.ReadLong();
+                    Eq("topic older thread", 12, r.ReadInt());
+                    Eq("topic older offset_id", 5000, r.ReadInt());
+                    Eq("topic older offset_date", 0, r.ReadInt());
+                    Eq("topic older add_offset", 0, r.ReadInt());
+                    Eq("topic older limit", 30, r.ReadInt());
+                    Eq("topic older max_id", int.MaxValue, r.ReadInt());
+                    Eq("topic older min_id", 0, r.ReadInt());
+                    Eq("topic older hash", 0L, r.ReadLong());
+                    Eq("topic older consumed", 0, r.Remaining);
+                }
+
+                // Whether there is more: a full slice says yes; a short page, or the
+                // server's "this is everything", says no.
+                {
+                    var full = new Messages.History();
+                    for (int i = 0; i < 30; i++) full.Messages.Add(new TextMessage());
+
+                    Eq("full slice has older", true, full.HasOlder(30));
+
+                    full.Complete = true;
+                    Eq("complete has none", false, full.HasOlder(30));
+
+                    var shortPage = new Messages.History();
+                    for (int i = 0; i < 12; i++) shortPage.Messages.Add(new TextMessage());
+                    Eq("short page has none", false, shortPage.HasOlder(30));
+                }
+            }
+
+            Section("audio files");
+            {
+                // An MP3 the usual way: an audio attribute without the voice flag,
+                // with a title and artist, and an audio mime type.
+                {
+                    MediaInfo m = Document("audio/mpeg", "song.mp3", true, false,
+                                           "Yesterday", "The Beatles", 125);
+
+                    Eq("mp3 kind", MediaKind.Audio, m.Kind);
+                    Eq("mp3 extension", ".mp3", Media.PlayableExtension(m));
+                    Eq("mp3 title", "Yesterday", m.Title);
+                    Eq("mp3 performer", "The Beatles", m.Performer);
+                    Eq("mp3 duration", 125, m.DurationSeconds);
+                    Eq("mp3 name", "The Beatles - Yesterday", m.TrackName());
+                }
+
+                // Nothing but the name to go on - octet-stream, no audio attribute.
+                // This is what turned up as "xxx.mp3.bin".
+                {
+                    MediaInfo m = Document("application/octet-stream", "Track 07.MP3",
+                                           false, false, null, null, 0);
+
+                    Eq("named mp3 kind", MediaKind.Audio, m.Kind);
+                    Eq("named mp3 extension", ".mp3", Media.PlayableExtension(m));
+                    Eq("named mp3 track name", "Track 07.MP3", m.TrackName());
+                }
+
+                // A voice message is audio too, and must stay a voice message: it
+                // is OGG/Opus, which this player cannot play, and has a decoder of
+                // its own.
+                {
+                    MediaInfo m = Document("audio/ogg", null, true, true, null, null, 4);
+                    Eq("voice kind", MediaKind.Voice, m.Kind);
+                }
+
+                // Music the phone cannot decode stays a file to save, rather than
+                // becoming a play button that fails.
+                {
+                    MediaInfo m = Document("audio/ogg", "song.ogg", true, false,
+                                           "x", "y", 60);
+                    Eq("ogg kind", MediaKind.Document, m.Kind);
+
+                    MediaInfo f = Document("audio/flac", "song.flac", true, false,
+                                           null, null, 60);
+                    Eq("flac kind", MediaKind.Document, f.Kind);
+                }
+
+                // And an ordinary document is left alone.
+                {
+                    MediaInfo m = Document("application/pdf", "report.pdf", false, false,
+                                           null, null, 0);
+                    Eq("pdf kind", MediaKind.Document, m.Kind);
+                }
+            }
+
             Section("byte strings and padding");
             {
                 // Lengths around every boundary that changes the encoding.
@@ -507,6 +689,72 @@ namespace Lumigram.Harness
                 }
                 return ms.ToArray();
             }
+        }
+
+        /// <summary>
+        /// Builds a messageReplyHeader the way the server sends one - fields in
+        /// declaration order, each present only when its bit is set - and reads it
+        /// back through the generated schema.
+        /// </summary>
+        private static TextMessage Reply(int flags, int replyTo, int topId,
+                                         bool elsewhere, string quote)
+        {
+            var w = new TlWriter();
+            w.WriteConstructor(TlConstructors.MessageReplyHeader).WriteInt(flags);
+
+            if ((flags & (1 << 4)) != 0) w.WriteInt(replyTo);              // reply_to_msg_id
+            if ((flags & (1 << 0)) != 0)                                   // reply_to_peer_id
+                w.WriteConstructor(TlConstructors.PeerChannel).WriteLong(424242);
+            if ((flags & (1 << 1)) != 0) w.WriteInt(topId);                // reply_to_top_id
+            if ((flags & (1 << 6)) != 0) w.WriteString(quote);             // quote_text
+
+            var t = new TextMessage();
+            Messages.ReadReply(TlSchema.ReadObject(new TlReader(w.ToArray())), t);
+            return t;
+        }
+
+        /// <summary>
+        /// Builds a document the way the server sends one, and reads it back through
+        /// the generated schema - the same path every received file takes.
+        /// </summary>
+        private static MediaInfo Document(string mime, string fileName, bool audio,
+                                          bool voice, string title, string performer,
+                                          int duration)
+        {
+            int attributes = (audio ? 1 : 0) + (fileName != null ? 1 : 0);
+
+            var w = new TlWriter();
+            w.WriteConstructor(TlConstructors.Document)
+             .WriteInt(0)                               // flags: no thumbs
+             .WriteLong(1001).WriteLong(2002)           // id, access_hash
+             .WriteBytes(new byte[] { 1, 2, 3 })        // file_reference
+             .WriteInt(1700000000)                      // date
+             .WriteString(mime)
+             .WriteLong(4096)                           // size
+             .WriteInt(2)                               // dc_id
+             .WriteConstructor(TlConstructors.Vector)
+             .WriteInt(attributes);
+
+            if (audio)
+            {
+                int flags = (voice ? TlConstructors.DocumentAttributeAudioVoiceFlag : 0) |
+                            (title != null ? 1 : 0) | (performer != null ? 2 : 0);
+
+                w.WriteConstructor(TlConstructors.DocumentAttributeAudio)
+                 .WriteInt(flags)
+                 .WriteInt(duration);
+
+                if (title != null) w.WriteString(title);
+                if (performer != null) w.WriteString(performer);
+            }
+
+            if (fileName != null)
+            {
+                w.WriteConstructor(TlConstructors.DocumentAttributeFilename)
+                 .WriteString(fileName);
+            }
+
+            return Media.FromDocument(TlSchema.ReadObject(new TlReader(w.ToArray())));
         }
 
         private static void Section(string name)

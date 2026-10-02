@@ -13,6 +13,13 @@ namespace Lumigram.Mtproto
         Document,
         Voice,
         Location,
+
+        /// <summary>
+        /// A music file the phone can play itself - MP3 above all, and the few other
+        /// formats MediaElement decodes. Added last so nothing that counted the
+        /// kinds before has to be renumbered.
+        /// </summary>
+        Audio,
     }
 
     /// <summary>
@@ -42,6 +49,10 @@ namespace Lumigram.Mtproto
 
         public string MimeType;
         public string FileName;
+
+        /// <summary>Track title and artist, when the sender's app filled them in.</summary>
+        public string Title;
+        public string Performer;
         public int DurationSeconds;
 
         /// <summary>Set when <see cref="Kind"/> is Location.</summary>
@@ -69,6 +80,24 @@ namespace Lumigram.Mtproto
             return (seconds / 60) + ":" + (seconds % 60).ToString("00");
         }
 
+        /// <summary>
+        /// "Artist - Title" when the sender's app said, otherwise the file name.
+        ///
+        /// Either half on its own is better than the file name, which is usually
+        /// "track07.mp3" or a string of digits.
+        /// </summary>
+        public string TrackName()
+        {
+            bool hasTitle = !string.IsNullOrEmpty(Title);
+            bool hasPerformer = !string.IsNullOrEmpty(Performer);
+
+            if (hasTitle && hasPerformer) return Performer + " - " + Title;
+            if (hasTitle) return Title;
+            if (hasPerformer) return Performer;
+
+            return FileName ?? "audio";
+        }
+
         public string Describe()
         {
             switch (Kind)
@@ -84,6 +113,9 @@ namespace Lumigram.Mtproto
                     return "voice message" + (DurationSeconds > 0 ? " " + Clock() : "");
                 case MediaKind.Document:
                     return FileName ?? (MimeType ?? "file");
+                case MediaKind.Audio:
+                    return "audio: " + TrackName() +
+                           (DurationSeconds > 0 ? " " + Clock() : "");
                 default:
                     return "";
             }
@@ -154,6 +186,45 @@ namespace Lumigram.Mtproto
             return info;
         }
 
+        /// <summary>
+        /// The extension a playable audio file has to be stored under, or null when
+        /// the phone cannot play it.
+        ///
+        /// It has to be right, not merely present: MediaElement decides what a file
+        /// is partly from its name, and refuses an MP3 stored as ".bin" - which is
+        /// what every document used to be stored as.
+        ///
+        /// The mime type is asked first and the name second. A name is what a person
+        /// typed and a mime type is what an app decided, and when they disagree the
+        /// app is usually the one that looked at the bytes.
+        /// </summary>
+        public static string PlayableExtension(MediaInfo info)
+        {
+            if (info == null) return null;
+
+            string mime = (info.MimeType ?? "").ToLowerInvariant();
+
+            if (mime == "audio/mpeg" || mime == "audio/mp3" || mime == "audio/mpeg3" ||
+                mime == "audio/x-mpeg-3" || mime == "audio/mpg")
+                return ".mp3";
+            if (mime == "audio/mp4" || mime == "audio/m4a" || mime == "audio/x-m4a")
+                return ".m4a";
+            if (mime == "audio/aac" || mime == "audio/aacp")
+                return ".aac";
+            if (mime == "audio/x-ms-wma")
+                return ".wma";
+            if (mime == "audio/wav" || mime == "audio/x-wav" || mime == "audio/wave")
+                return ".wav";
+
+            string name = (info.FileName ?? "").ToLowerInvariant();
+            string[] known = { ".mp3", ".m4a", ".aac", ".wma", ".wav" };
+
+            foreach (string extension in known)
+                if (name.EndsWith(extension)) return extension;
+
+            return null;
+        }
+
         public static MediaInfo FromDocument(TlObject document)
         {
             if (document == null || document.Ctor != TlConstructors.Document) return null;
@@ -173,6 +244,8 @@ namespace Lumigram.Mtproto
             // It is addressed the same way, so keeping its size name is all that is
             // needed to fetch it later.
             if (document.Has("thumbs")) info.ThumbSizeType = BestThumb(document.Vec("thumbs"));
+
+            bool audioAttribute = false;
 
             foreach (object o in document.Vec("attributes"))
             {
@@ -201,6 +274,11 @@ namespace Lumigram.Mtproto
                     int flags = a.IntOr("flags", 0);
                     if ((flags & TlConstructors.DocumentAttributeAudioVoiceFlag) != 0)
                         info.Kind = MediaKind.Voice;
+                    else
+                        audioAttribute = true;
+
+                    if (a.Has("title")) info.Title = a.Str("title");
+                    if (a.Has("performer")) info.Performer = a.Str("performer");
 
                     if (a.Has("duration"))
                     {
@@ -223,6 +301,14 @@ namespace Lumigram.Mtproto
             if (info.Kind == MediaKind.Document && info.MimeType != null &&
                 info.MimeType.StartsWith("image/"))
                 info.Kind = MediaKind.Photo;
+
+            // A music file the phone can play. Recognised by the audio attribute, by
+            // an audio mime type, or by the name alone - plenty arrive as
+            // application/octet-stream with nothing but ".mp3" to say what they are.
+            // Only formats MediaElement actually decodes: an OGG or FLAC tagged as
+            // audio stays a document to save, rather than a play button that fails.
+            if (info.Kind == MediaKind.Document && PlayableExtension(info) != null)
+                info.Kind = MediaKind.Audio;
 
             return info;
         }

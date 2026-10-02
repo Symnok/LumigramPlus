@@ -112,6 +112,40 @@ namespace LumigramPlus.App
         public string Time { get; set; }
         public bool Out { get; set; }
 
+        /// <summary>The message this one answers, or 0. See TextMessage.ReplyToId.</summary>
+        public int ReplyToId { get; set; }
+
+        /// <summary>The part of the original the sender quoted, or null.</summary>
+        public string ReplyQuote { get; set; }
+
+        /// <summary>The original is in another chat, so there is nothing to look up.</summary>
+        public bool ReplyElsewhere { get; set; }
+
+        private string _replyText;
+
+        /// <summary>
+        /// The quotation line, worked out by the page - which is the one that knows
+        /// the other messages and who wrote them. Raises changes, because it starts
+        /// as "reply" for an original not yet loaded and is filled in when it is.
+        /// </summary>
+        public string ReplyText
+        {
+            get { return _replyText; }
+            set
+            {
+                if (_replyText == value) return;
+
+                _replyText = value;
+                Raise("ReplyText");
+                Raise("ReplyVisibility");
+            }
+        }
+
+        public Visibility ReplyVisibility
+        {
+            get { return string.IsNullOrEmpty(_replyText) ? Visibility.Collapsed : Visibility.Visible; }
+        }
+
         private List<MessageReaction> _reactions = new List<MessageReaction>();
         private List<ReactionChip> _chips = new List<ReactionChip>();
 
@@ -497,6 +531,18 @@ namespace LumigramPlus.App
         /// <summary>How much history to fetch. A screenful several times over.</summary>
         private const int HistoryCount = 30;
 
+        /// <summary>
+        /// Whether there is anything before the oldest message on screen.
+        ///
+        /// The server's own answer, read off each page - see History.HasOlder -
+        /// rather than assumed from the count, so the button goes away at the real
+        /// beginning of a conversation and not at an arbitrary one.
+        /// </summary>
+        private bool _hasOlder;
+
+        /// <summary>A page of older messages is on its way; a second tap waits for it.</summary>
+        private bool _loadingOlder;
+
         private readonly ObservableCollection<MessageItem> _messages =
             new ObservableCollection<MessageItem>();
 
@@ -776,12 +822,15 @@ namespace LumigramPlus.App
                 for (int i = history.Messages.Count - 1; i >= 0; i--)
                     Add(history.Messages[i]);
 
+                ShowOlder(history.HasOlder(HistoryCount));
+
                 SetBusy(false, _messages.Count == 0 ? "No messages yet." : "");
 
                 if (_focusId != 0) ShowFocused();
                 else OpenWhereReadingStopped();
 
                 MarkRead(client, history.Messages);
+                FetchMissingReplies();
                 StartPolling();
             }
             catch (Exception ex)
@@ -983,6 +1032,7 @@ namespace LumigramPlus.App
                 {
                     ScrollToEnd();
                     MarkRead(client, history.Messages);
+                    FetchMissingReplies();
                 }
             }
             catch (RpcException ex) when (TelegramService.IsAuthGone(ex))
@@ -1049,6 +1099,19 @@ namespace LumigramPlus.App
 
         private void Add(TextMessage m)
         {
+            Add(m, -1);
+        }
+
+        /// <summary>
+        /// Puts a message on screen at <paramref name="index"/>, or at the end when
+        /// that is negative.
+        ///
+        /// The end is where new messages go; the front is where older ones go. Both
+        /// need everything else Add does - the sender, the media caption, fetching a
+        /// preview - so it is one method with a place to put it rather than two.
+        /// </summary>
+        private void Add(TextMessage m, int index)
+        {
             // Worked out once per chat rather than per message; see
             // MessageItem.CanLink.
             var item = new MessageItem
@@ -1063,6 +1126,9 @@ namespace LumigramPlus.App
                 Ticks = m.Out && m.Id != 0 && m.Id <= _readOutbox
                     ? MessageTicks.Read : MessageTicks.Sent,
                 Reactions = m.Reactions,
+                ReplyToId = m.ReplyToId,
+                ReplyQuote = m.ReplyQuote,
+                ReplyElsewhere = m.ReplyElsewhere,
             };
 
             if (m.Media != null)
@@ -1070,10 +1136,18 @@ namespace LumigramPlus.App
                 // Photos are cheap enough to fetch on sight when the setting allows
                 // it. Everything else waits to be asked for: a document can be any
                 // size at all, and this is a phone on a phone network.
-                item.MediaNote = m.Media.Describe() + " - tap to load";
+                // Audio says what a tap will do, which is more than loading: it
+                // downloads and then plays.
+                item.MediaNote = m.Media.Describe() +
+                    (m.Media.Kind == MediaKind.Audio ? " - tap to play" : " - tap to load");
             }
 
-            _messages.Add(item);
+            if (index < 0 || index > _messages.Count) _messages.Add(item);
+            else _messages.Insert(index, item);
+
+            // From what is on screen now. One whose original is further back is
+            // filled in by FetchMissingReplies once the page is in.
+            ResolveReply(item);
 
             // Anything already fetched is shown without asking; anything else is
             // fetched now or on tap, depending on the setting.
@@ -1369,6 +1443,12 @@ namespace LumigramPlus.App
                     return;
                 }
 
+                if (item.Media.Kind == MediaKind.Audio)
+                {
+                    item.MediaNote = item.Media.Describe() + " - tap to play";
+                    return;
+                }
+
                 // Nothing to draw for a document, so say it is here and what can be
                 // done with it - otherwise a finished download looks like nothing
                 // happened.
@@ -1478,6 +1558,13 @@ namespace LumigramPlus.App
             var item = element.DataContext as MessageItem;
             if (item == null || item.Media == null) return;
 
+            // Without this an MP3 fell through to the picture viewer below.
+            if (item.Media.Kind == MediaKind.Audio)
+            {
+                PlayAudio(item);
+                return;
+            }
+
             Windows.Storage.StorageFile file = await MediaCache.FindAsync(item.Media);
 
             if (file == null)
@@ -1533,6 +1620,189 @@ namespace LumigramPlus.App
             ReplyBar.Visibility = Visibility.Visible;
 
             ComposeBox.Focus(FocusState.Programmatic);
+        }
+
+        // ---- reply quotations -------------------------------------------------
+
+        /// <summary>
+        /// Originals fetched by id because they were not among the loaded messages.
+        /// Kept for as long as the conversation is open, so scrolling back past a
+        /// reply does not ask for its original again.
+        /// </summary>
+        private readonly Dictionary<int, TextMessage> _originals =
+            new Dictionary<int, TextMessage>();
+
+        /// <summary>
+        /// Ids already asked for, found or not. One that came back deleted, or not
+        /// at all, is not asked for again on every refresh.
+        /// </summary>
+        private readonly HashSet<int> _askedFor = new HashSet<int>();
+
+        /// <summary>How long a quotation line is allowed to be before it is cut.</summary>
+        private const int QuoteLength = 60;
+
+        /// <summary>
+        /// Works out a message's quotation line from whatever is known about the
+        /// original: on screen, fetched, or not yet either.
+        ///
+        /// What the sender quoted wins over the start of the original, because it is
+        /// the part they meant.
+        /// </summary>
+        private void ResolveReply(MessageItem item)
+        {
+            if (item == null) return;
+
+            if (item.ReplyElsewhere)
+            {
+                item.ReplyText = "reply to another chat" +
+                    (string.IsNullOrEmpty(item.ReplyQuote) ? "" : ": " + Snip(item.ReplyQuote));
+                return;
+            }
+
+            if (item.ReplyToId == 0)
+            {
+                item.ReplyText = null;
+                return;
+            }
+
+            MessageItem shown = FindItem(item.ReplyToId);
+            if (shown != null)
+            {
+                item.ReplyText = Who(shown.Out, shown.SenderName) + ": " +
+                                 Snip(item.ReplyQuote ?? Body(shown.Text, shown.Media));
+                return;
+            }
+
+            TextMessage fetched;
+            if (_originals.TryGetValue(item.ReplyToId, out fetched))
+            {
+                // messageEmpty comes back for a message that has been deleted.
+                if (fetched.Note == "empty")
+                {
+                    item.ReplyText = "reply to a deleted message";
+                    return;
+                }
+
+                item.ReplyText = Who(fetched.Out, SenderFor(fetched)) + ": " +
+                                 Snip(item.ReplyQuote ?? Body(fetched.Text, fetched.Media));
+                return;
+            }
+
+            // Not here yet. What the sender quoted, if anything, is still better
+            // than a bare "reply" while the original is fetched.
+            item.ReplyText = string.IsNullOrEmpty(item.ReplyQuote)
+                ? "reply"
+                : "reply: " + Snip(item.ReplyQuote);
+        }
+
+        /// <summary>
+        /// Fetches, in one request, every original that replies on screen are still
+        /// waiting for - and fills in any that have since turned up on screen.
+        ///
+        /// One request per page rather than one per reply, and never the same id
+        /// twice: this runs after every refresh, and a conversation full of replies
+        /// to old messages would otherwise ask for the same ones every few seconds.
+        /// </summary>
+        private async void FetchMissingReplies()
+        {
+            var missing = new List<int>();
+
+            foreach (MessageItem item in _messages)
+            {
+                if (item.ReplyToId == 0 || item.ReplyElsewhere) continue;
+
+                if (FindItem(item.ReplyToId) != null || _originals.ContainsKey(item.ReplyToId))
+                {
+                    ResolveReply(item);
+                    continue;
+                }
+
+                if (_askedFor.Contains(item.ReplyToId) || missing.Contains(item.ReplyToId))
+                    continue;
+
+                missing.Add(item.ReplyToId);
+            }
+
+            if (missing.Count == 0 || _peer == null) return;
+
+            foreach (int id in missing) _askedFor.Add(id);
+
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                Messages.History found = await Messages.GetByIdAsync(
+                    client, _peer.Kind, _peer.PeerId, _peer.AccessHash, missing,
+                    TelegramService.Info);
+
+                foreach (KeyValuePair<long, PeerInfo> pair in found.Senders)
+                    _senders[pair.Key] = pair.Value;
+
+                foreach (TextMessage m in found.Messages)
+                    if (m.Id != 0) _originals[m.Id] = m;
+
+                foreach (MessageItem item in _messages)
+                    if (missing.Contains(item.ReplyToId)) ResolveReply(item);
+            }
+            catch (Exception)
+            {
+                // The line stays "reply". Not worth interrupting reading for, and
+                // the ids are not asked for again until the conversation is reopened.
+            }
+        }
+
+        /// <summary>
+        /// Goes to the original of a reply, when it is on screen.
+        ///
+        /// When it is not, says where it is rather than doing nothing: further back,
+        /// where "older messages" reaches, or gone.
+        /// </summary>
+        private void ReplyQuote_Tapped(object sender, Windows.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            var element = sender as FrameworkElement;
+            var item = element == null ? null : element.DataContext as MessageItem;
+            if (item == null || item.ReplyToId == 0) return;
+
+            // Kept from the bubble, whose own taps are for pictures and files.
+            e.Handled = true;
+
+            MessageItem original = FindItem(item.ReplyToId);
+            if (original != null)
+            {
+                BringIntoView(original);
+                return;
+            }
+
+            SetBusy(false, _hasOlder
+                ? "The original is further back - \"older messages\" at the top reaches it."
+                : "The original is no longer in this chat.");
+        }
+
+        /// <summary>"You" for our own, the sender's name in a group, the chat's in one-to-one.</summary>
+        private string Who(bool own, string senderName)
+        {
+            if (own) return "You";
+            if (!string.IsNullOrEmpty(senderName)) return senderName;
+
+            return _peer != null && _peer.Title != null ? _peer.Title : "";
+        }
+
+        /// <summary>The words of a message, or what it is when it has none.</summary>
+        private static string Body(string text, MediaInfo media)
+        {
+            if (!string.IsNullOrEmpty(text)) return text;
+            if (media != null) return media.Describe();
+
+            return "message";
+        }
+
+        /// <summary>One line of at most QuoteLength characters.</summary>
+        private static string Snip(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+
+            string one = text.Replace("\r", " ").Replace("\n", " ").Trim();
+            return one.Length <= QuoteLength ? one : one.Substring(0, QuoteLength - 3) + "...";
         }
 
         // ---- reactions --------------------------------------------------------
@@ -2043,6 +2313,14 @@ namespace LumigramPlus.App
                 return;
             }
 
+            // Audio has nothing to preview, so there is no accident to guard
+            // against: one tap downloads it if need be, and then plays it.
+            if (item.Media.Kind == MediaKind.Audio)
+            {
+                PlayAudio(item);
+                return;
+            }
+
             // A single tap fetches. Playing is on the double tap, so that tapping a
             // preview to see it bigger never starts a video by accident.
             LoadMedia(item);
@@ -2089,6 +2367,43 @@ namespace LumigramPlus.App
         /// next plays. Two gestures for the two halves of one action would be
         /// something to learn rather than something to use.
         /// </summary>
+        /// <summary>
+        /// Downloads an audio file if it is not here yet, and then plays it.
+        ///
+        /// The player is only opened if this conversation is still what is on
+        /// screen when the download finishes. A long track on a slow connection can
+        /// take a minute, and by then the reader may be somewhere else entirely -
+        /// pulling them into a player from wherever they went would be the app
+        /// acting on a tap they have forgotten making.
+        /// </summary>
+        private async void PlayAudio(MessageItem item)
+        {
+            if (item == null || item.Media == null) return;
+
+            Windows.Storage.StorageFile file = await MediaCache.FindAsync(item.Media);
+
+            if (file == null)
+            {
+                await LoadMediaAsync(item);
+                file = await MediaCache.FindAsync(item.Media);
+
+                // The caption already says why - see LoadMediaAsync.
+                if (file == null) return;
+
+                if (Frame == null || Frame.Content != this) return;
+            }
+
+            Frame.Navigate(typeof(AudioPage), new AudioRequest
+            {
+                CachedName = file.Name,
+                // The title on one line and the artist on the next, so not the
+                // combined "Artist - Title" the bubble uses.
+                Title = !string.IsNullOrEmpty(item.Media.Title) ? item.Media.Title
+                                                                : (item.Media.FileName ?? "audio"),
+                Performer = item.Media.Performer,
+            });
+        }
+
         private async void PlayOrLoad(MessageItem item)
         {
             if (item.Media != null && item.Media.Kind == MediaKind.Video)
@@ -2488,11 +2803,19 @@ namespace LumigramPlus.App
             string name = item.Media.FileName;
             if (string.IsNullOrEmpty(name)) name = cached.Name;
 
-            picker.SuggestedFileName = name;
-            picker.DefaultFileExtension = System.IO.Path.GetExtension(cached.Name);
+            // The extension comes from the file's own name, and the cached copy's
+            // only when it has none. Taking it from the cache is what produced
+            // "song.mp3.bin" and "report.pdf.bin": every document is cached as
+            // ".bin", and the picker appends the extension it is given to a
+            // suggested name that already had the real one.
+            string extension = System.IO.Path.GetExtension(name);
+            if (string.IsNullOrEmpty(extension))
+                extension = System.IO.Path.GetExtension(cached.Name);
 
-            picker.FileTypeChoices.Add("file",
-                new List<string> { System.IO.Path.GetExtension(cached.Name) });
+            picker.SuggestedFileName = System.IO.Path.GetFileNameWithoutExtension(name);
+            picker.DefaultFileExtension = extension;
+
+            picker.FileTypeChoices.Add("file", new List<string> { extension });
 
             picker.PickSaveFileAndContinue();
         }
@@ -2581,9 +2904,11 @@ namespace LumigramPlus.App
                 Out = true,
                 CanLink = _canLink,
                 Ticks = MessageTicks.Sending,
+                ReplyToId = replyTo,
             };
 
             _messages.Add(pending);
+            ResolveReply(pending);
             ScrollToEnd();
 
             try
@@ -2637,6 +2962,129 @@ namespace LumigramPlus.App
         /// only when something new arrives. This is the way back without waiting for
         /// somebody else to say something.
         /// </summary>
+        private void Older_Click(object sender, RoutedEventArgs e)
+        {
+            LoadOlder();
+        }
+
+        /// <summary>
+        /// Shows or hides the ways to go further back.
+        ///
+        /// The menu item too, not only the button: once the start of the conversation
+        /// is on screen, a menu entry promising older messages would load nothing.
+        /// </summary>
+        private void ShowOlder(bool hasOlder)
+        {
+            _hasOlder = hasOlder;
+
+            Visibility shown = hasOlder && !_loadingOlder ? Visibility.Visible
+                                                          : Visibility.Collapsed;
+            OlderButton.Visibility = shown;
+            OlderMenuItem.Visibility = hasOlder ? Visibility.Visible : Visibility.Collapsed;
+            OlderBusy.Visibility = _loadingOlder ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// Fetches the page before the oldest message on screen, and puts it above.
+        ///
+        /// The reader stays where they were. The message that was at the top before
+        /// is scrolled back to the top afterwards, so the new page arrives above it,
+        /// out of sight, to be scrolled up into - rather than the view jumping to the
+        /// start of a page they have not read the end of.
+        ///
+        /// A message already on screen is not added twice. Pages are asked for by id
+        /// and do not overlap, but a message arriving while the request is out can
+        /// shift what the server counts as "before".
+        /// </summary>
+        private async void LoadOlder()
+        {
+            if (_loadingOlder || !_hasOlder) return;
+
+            MessageItem firstShown = null;
+            int oldest = 0;
+
+            foreach (MessageItem item in _messages)
+            {
+                if (item.Id <= 0) continue;
+
+                firstShown = item;
+                oldest = item.Id;
+                break;
+            }
+
+            if (oldest == 0) return;
+
+            _loadingOlder = true;
+            ShowOlder(_hasOlder);
+
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                Messages.History page = _topicId != 0
+                    ? await Topics.GetHistoryBeforeAsync(client, _inputPeer, _topicId,
+                                                         oldest, HistoryCount,
+                                                         TelegramService.Info)
+                    : await Messages.GetHistoryBeforeAsync(client, _inputPeer, oldest,
+                                                           HistoryCount, TelegramService.Info);
+
+                foreach (KeyValuePair<long, PeerInfo> pair in page.Senders)
+                    _senders[pair.Key] = pair.Value;
+
+                // Newest first from the server, so walking it backwards and inserting
+                // each at the next position down keeps the oldest at the very top.
+                int at = 0;
+                for (int i = page.Messages.Count - 1; i >= 0; i--)
+                {
+                    TextMessage m = page.Messages[i];
+                    if (m.Id == 0 || Contains(m.Id)) continue;
+
+                    Add(m, at);
+                    at++;
+                }
+
+                _loadingOlder = false;
+                ShowOlder(page.HasOlder(HistoryCount));
+
+                // A page further back can hold originals that newer replies on
+                // screen were waiting for.
+                FetchMissingReplies();
+
+                if (at == 0) SetBusy(false, "That is the beginning of the conversation.");
+                else SetBusy(false, "");
+
+                // Back to where the reader was. Low priority, so it runs once the new
+                // rows have been laid out and there is a position to go back to.
+                if (at > 0 && firstShown != null)
+                {
+                    MessageItem keep = firstShown;
+                    var ignored = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low,
+                        delegate
+                        {
+                            MessageList.UpdateLayout();
+                            MessageList.ScrollIntoView(keep, ScrollIntoViewAlignment.Leading);
+                        });
+                }
+            }
+            catch (RpcException ex) when (TelegramService.IsAuthGone(ex))
+            {
+                _loadingOlder = false;
+                if (_poll != null) _poll.Stop();
+
+                await TelegramService.AuthGoneAsync();
+                Frame.Navigate(typeof(QrLoginPage));
+            }
+            catch (Exception ex)
+            {
+                _loadingOlder = false;
+                ShowOlder(_hasOlder);
+
+                var rpc = ex as RpcException;
+                SetBusy(false, "Could not load older messages: " +
+                               (rpc != null ? rpc.ErrorType : ex.Message));
+            }
+        }
+
         private void SkipToEnd_Click(object sender, RoutedEventArgs e)
         {
             if (_focusId == 0)
