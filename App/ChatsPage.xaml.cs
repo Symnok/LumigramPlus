@@ -37,6 +37,12 @@ namespace LumigramPlus.App
         /// <summary>Newest message already read, so a chat can open where it left off.</summary>
         public int ReadInboxMaxId { get; set; }
 
+        /// <summary>
+        /// Newest message of ours the other side has read, so a conversation can
+        /// mark its own messages without asking for it again.
+        /// </summary>
+        public int ReadOutboxMaxId { get; set; }
+
         /// <summary>True when this came from the archive rather than the main list.</summary>
         public bool Archived { get; set; }
 
@@ -105,7 +111,13 @@ namespace LumigramPlus.App
         public int UnreadCount
         {
             get { return _unread; }
-            set { _unread = value; Raise("UnreadCount"); Raise("UnreadVisibility"); }
+            set
+            {
+                _unread = value;
+                Raise("UnreadCount");
+                Raise("UnreadVisibility");
+                Raise("UnreadDotVisibility");
+            }
         }
 
         private bool _muted;
@@ -115,9 +127,32 @@ namespace LumigramPlus.App
             set { _muted = value; Raise("Muted"); Raise("MutedVisibility"); }
         }
 
+        /// <summary>
+        /// The counted badge, which a forum does not get.
+        ///
+        /// A forum's unread messages are spread over its topics, and one number
+        /// across all of them answers a question nobody asked - the useful count is
+        /// per topic, and that is shown on the topic list. So a forum gets a plain
+        /// dot saying "something in here is unread" and the numbers live one level
+        /// down, where they mean something.
+        /// </summary>
         public Visibility UnreadVisibility
         {
-            get { return UnreadCount > 0 ? Visibility.Visible : Visibility.Collapsed; }
+            get
+            {
+                return UnreadCount > 0 && !IsForum ? Visibility.Visible
+                                                   : Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>The uncounted badge, which is the forum case of the above.</summary>
+        public Visibility UnreadDotVisibility
+        {
+            get
+            {
+                return UnreadCount > 0 && IsForum ? Visibility.Visible
+                                                  : Visibility.Collapsed;
+            }
         }
 
         public Visibility MutedVisibility
@@ -613,7 +648,20 @@ namespace LumigramPlus.App
 
             var menu = new Windows.UI.Xaml.Controls.MenuFlyout();
 
-            Add(menu, chat.Muted ? "unmute" : "mute", delegate { ToggleMute(chat); });
+            if (!chat.IsForum)
+            {
+                Add(menu, chat.Muted ? "unmute" : "mute", delegate { ToggleMute(chat); });
+            }
+            else
+            {
+                // Both at once, rather than one toggle. A forum has no single mute
+                // state to toggle out of: each topic has its own, so after muting
+                // one topic the forum is neither muted nor unmuted, and a toggle
+                // would have to pick one of those to claim. Offering both actions
+                // asks nothing and says exactly what each will do.
+                Add(menu, "mute all topics", delegate { SetForumMuted(chat, true); });
+                Add(menu, "unmute all topics", delegate { SetForumMuted(chat, false); });
+            }
             Add(menu, chat.Archived ? "unarchive" : "archive", delegate { ToggleArchive(chat); });
 
             foreach (ChatFolder folder in _folders)
@@ -655,7 +703,56 @@ namespace LumigramPlus.App
                 MtprotoClient client = await TelegramService.ConnectAsync();
 
                 await Messages.SetMutedAsync(client, chat.Kind, chat.PeerId,
-                                             chat.AccessHash, muted, TelegramService.Info);
+                                             chat.AccessHash, muted,
+                                             TelegramService.Info);
+            }
+            catch (Exception ex)
+            {
+                chat.Muted = !muted;
+
+                var rpc = ex as RpcException;
+                SetBusy(false, "Could not change mute: " +
+                               (rpc != null ? rpc.ErrorType : ex.Message));
+            }
+        }
+
+        /// <summary>
+        /// Mutes or unmutes every topic of a forum, and the forum itself.
+        ///
+        /// Said rather than toggled - see the menu. Both halves are needed and
+        /// neither is enough on its own; Topics.SetAllMutedAsync has the reasoning.
+        ///
+        /// The row's own glyph follows the forum's setting, which is what a topic
+        /// with no setting of its own inherits. It is not a claim that every topic
+        /// agrees: one the user unmutes afterwards will not, and that is the point
+        /// of being able to unmute one.
+        /// </summary>
+        private async void SetForumMuted(DialogItem chat, bool muted)
+        {
+            chat.Muted = muted;
+
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                SetBusy(true, muted ? "Muting topics..." : "Unmuting topics...");
+
+                int done = await Topics.SetAllMutedAsync(
+                    client, chat.Kind, chat.PeerId, chat.AccessHash, muted,
+                    delegate (int at, int total)
+                    {
+                        var ignored = Dispatcher.RunAsync(
+                            Windows.UI.Core.CoreDispatcherPriority.Low,
+                            delegate
+                            {
+                                SetBusy(true, (muted ? "Muting" : "Unmuting") +
+                                              " topics " + at + " of " + total + "...");
+                            });
+                    },
+                    TelegramService.Info);
+
+                SetBusy(false, (muted ? "Muted " : "Unmuted ") + done + " topic" +
+                               (done == 1 ? "" : "s") + ".");
             }
             catch (Exception ex)
             {
@@ -849,6 +946,7 @@ namespace LumigramPlus.App
                 PhotoId = d.PhotoId,
                 PhotoDcId = d.PhotoDcId,
                 ReadInboxMaxId = d.ReadInboxMaxId,
+                ReadOutboxMaxId = d.ReadOutboxMaxId,
                 Archived = d.Archived,
                 IsForum = d.IsForum,
                 Username = d.Username,

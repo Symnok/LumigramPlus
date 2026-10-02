@@ -61,6 +61,11 @@
                                     <MenuFlyoutItem Text="reply"
                                                     Visibility="{Binding ActionVisibility}"
                                                     Click="ReplyMenu_Click"/>
+                                    <!-- Own messages with words in them: see
+                                         MessageItem.EditVisibility. -->
+                                    <MenuFlyoutItem Text="edit"
+                                                    Visibility="{Binding EditVisibility}"
+                                                    Click="EditMenu_Click"/>
                                     <MenuFlyoutItem Text="forward..."
                                                     Visibility="{Binding ActionVisibility}"
                                                     Click="ForwardMenu_Click"/>
@@ -136,10 +141,48 @@
                                            FontSize="{StaticResource AppBodyFontSize}"
                                            Loaded="MessageText_Loaded"
                                            Visibility="{Binding TextVisibility}"/>
-                                <TextBlock Text="{Binding Time}"
-                                           FontSize="{StaticResource AppCaptionFontSize}"
-                                           Opacity="0.5"
-                                           HorizontalAlignment="Right" Margin="0,2,0,0"/>
+                                <!--
+                                  The time, and for our own messages how far they
+                                  have got.
+
+                                  The marks are drawn as geometry rather than written
+                                  as a character: this platform has no icon font that
+                                  can be relied on, and a missing glyph shows as an
+                                  empty box - the same reason the chat list draws its
+                                  mute symbol.
+                                -->
+                                <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Right" Margin="0,2,0,0">
+                                    <TextBlock Text="{Binding Time}"
+                                               FontSize="{StaticResource AppCaptionFontSize}"
+                                               Opacity="0.5"/>
+                                    <!--
+                                      One mark or two, each drawn whole as its own
+                                      shape and only one of them shown.
+
+                                      The first version drew the pair as two 7-pixel
+                                      marks overlapping by half, which at phone size
+                                      was one smudge whether it was one mark or two.
+                                      These are twice the size, the second sits far
+                                      enough along that the two points at the bottom
+                                      are separate, and the line ends are rounded so
+                                      a thin stroke still reads as a shape.
+                                    -->
+                                    <Canvas Width="25" Height="13" Margin="7,0,0,0"
+                                            VerticalAlignment="Center"
+                                            Visibility="{Binding TickVisibility}">
+                                        <Path Stroke="{Binding TickBrush}" StrokeThickness="2.2"
+                                              StrokeLineJoin="Round"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              Visibility="{Binding SingleTickVisibility}"
+                                              Data="M1,7 L5.5,11.5 L14,1.5"/>
+                                        <Path Stroke="{Binding TickBrush}" StrokeThickness="2.2"
+                                              StrokeLineJoin="Round"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              Visibility="{Binding DoubleTickVisibility}"
+                                              Data="M1,7 L5.5,11.5 L14,1.5 M10,7 L14.5,11.5 L23,1.5"/>
+                                    </Canvas>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </DataTemplate>
@@ -166,6 +209,35 @@
                     <Button Grid.Column="1" Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
                             FontSize="14" Padding="8,2,8,2" MinWidth="0"
                             BorderThickness="0" Click="CancelReply_Click"/>
+                </Grid>
+            </Border>
+
+            <!--
+              Standing above the box for the same reason the reply bar does: an edit
+              in progress that is not visible is an edit the user forgets is armed,
+              and the next thing they type replaces a message instead of sending one.
+
+              Its own bar rather than reusing the reply one, because the two can
+              never both be right - replying and editing are different things to do
+              with the box - and sharing it would mean one of them silently cancelling
+              the other.
+            -->
+            <Border x:Name="EditBar" Visibility="Collapsed" Margin="0,8,0,0"
+                    Padding="8,4,4,4" Background="{ThemeResource PhoneChromeBrush}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock Text="editing" FontSize="11" Opacity="0.6"/>
+                        <TextBlock x:Name="EditText" TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   FontSize="{StaticResource AppSubtleFontSize}"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="&#xE711;" FontFamily="Segoe MDL2 Assets"
+                            FontSize="14" Padding="8,2,8,2" MinWidth="0"
+                            BorderThickness="0" Click="CancelEdit_Click"/>
                 </Grid>
             </Border>
 

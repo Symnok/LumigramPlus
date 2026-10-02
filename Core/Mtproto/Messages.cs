@@ -50,6 +50,16 @@ namespace Lumigram.Mtproto
         /// difference between resuming and having to scroll back.
         /// </summary>
         public int ReadInboxMaxId;
+
+        /// <summary>
+        /// The newest message of ours that the other side has read.
+        ///
+        /// The only read signal Telegram gives a sender. There is no delivery
+        /// receipt in the protocol - a message is on the server or it is not, and
+        /// then at some point this number passes it.
+        /// </summary>
+        public int ReadOutboxMaxId;
+
         public int UnreadCount;
         public string LastText;
 
@@ -299,6 +309,44 @@ namespace Lumigram.Mtproto
 
             q.WriteString(text)
              .WriteLong(randomId);
+
+            return q.ToArray();
+        }
+
+        /// <summary>
+        /// Changes the text of a message already sent.
+        ///
+        /// Only the sender's own, and only within the window Telegram allows - the
+        /// server decides both, and refuses with MESSAGE_AUTHOR_REQUIRED or
+        /// MESSAGE_EDIT_TIME_EXPIRED rather than silently doing nothing.
+        /// </summary>
+        public static async Task<int> EditTextAsync(MtprotoClient client, byte[] inputPeer,
+                                                    int messageId, string text,
+                                                    ClientInfo info = null)
+        {
+            TlReader r = await client.InvokeAsync(
+                EditTextBody(inputPeer, messageId, text), info);
+
+            return SentMessageId(TlSchema.ReadObject(r));
+        }
+
+        /// <summary>
+        /// The messages.editMessage payload, separated so it can be checked without
+        /// a connection.
+        ///
+        /// The flags word is the part worth checking. message is flags.11, which is
+        /// a long way from the low bits anything else here sets, and a wrong bit
+        /// means the server reads the text as a different optional field - or reads
+        /// no text and edits the message to empty.
+        /// </summary>
+        public static byte[] EditTextBody(byte[] inputPeer, int messageId, string text)
+        {
+            var q = new TlWriter((text == null ? 0 : text.Length) + 64);
+            q.WriteConstructor(TlConstructors.MessagesEditMessage)
+             .WriteInt(1 << 11)                 // flags.11: message, and nothing else
+             .WriteRaw(inputPeer)
+             .WriteInt(messageId)
+             .WriteString(text ?? "");
 
             return q.ToArray();
         }
@@ -874,6 +922,7 @@ namespace Lumigram.Mtproto
                     PhotoDcId = photoDc,
                     TopMessageDate = lastDate.ContainsKey(key) ? lastDate[key] : 0,
                     ReadInboxMaxId = d.IntOr("read_inbox_max_id", 0),
+                    ReadOutboxMaxId = d.IntOr("read_outbox_max_id", 0),
                     Archived = folderId != 0,
                     IsBot = bots.Contains(PeerId(peer)),
                     IsContact = contacts.Contains(PeerId(peer)),

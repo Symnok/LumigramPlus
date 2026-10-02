@@ -56,6 +56,9 @@ namespace LumigramPlus.App
         public int UnreadCount { get; set; }
         public bool Closed { get; set; }
 
+        /// <summary>Whether this topic has been silenced on its own.</summary>
+        public bool Muted { get; set; }
+
         /// <summary>The topic's own colour, as the forum chose it.</summary>
         public int IconColor { get; set; }
 
@@ -70,6 +73,11 @@ namespace LumigramPlus.App
         public Visibility ClosedVisibility
         {
             get { return Closed ? Visibility.Visible : Visibility.Collapsed; }
+        }
+
+        public Visibility MutedVisibility
+        {
+            get { return Muted ? Visibility.Visible : Visibility.Collapsed; }
         }
 
         /// <summary>One letter standing in for the topic's emoji badge.</summary>
@@ -252,6 +260,10 @@ namespace LumigramPlus.App
         /// </summary>
         private void Adopt(Topics.TopicPage page)
         {
+            // Compared against the mute expiry, which is a time rather than a flag.
+            int now = (int)(DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0,
+                                                           DateTimeKind.Utc)).TotalSeconds;
+
             foreach (ForumTopic t in page.Topics)
             {
                 if (Contains(t.Id)) continue;
@@ -263,6 +275,7 @@ namespace LumigramPlus.App
                     Preview = Shorten(t.LastText),
                     UnreadCount = t.UnreadCount,
                     Closed = t.Closed,
+                    Muted = t.IsMuted(now),
                     IconColor = t.IconColor,
                     ReadInboxMaxId = t.ReadInboxMaxId,
                 });
@@ -301,6 +314,59 @@ namespace LumigramPlus.App
         private void Refresh_Click(object sender, RoutedEventArgs e)
         {
             Load();
+        }
+
+        /// <summary>
+        /// Mutes or unmutes one topic, leaving the rest of the forum alone.
+        ///
+        /// The forum-wide switch is on the chat list, where muting the supergroup
+        /// means all of its topics. This is the other half: one thread silenced
+        /// while the others go on notifying.
+        /// </summary>
+        private void Topic_Holding(object sender, Windows.UI.Xaml.Input.HoldingRoutedEventArgs e)
+        {
+            if (e.HoldingState != Windows.UI.Input.HoldingState.Started) return;
+
+            var element = sender as FrameworkElement;
+            if (element == null) return;
+
+            var topic = element.DataContext as TopicItem;
+            if (topic == null) return;
+
+            var menu = new MenuFlyout();
+            var entry = new MenuFlyoutItem { Text = topic.Muted ? "unmute topic" : "mute topic" };
+
+            TopicItem which = topic;
+            entry.Click += delegate { ToggleMute(which); };
+            menu.Items.Add(entry);
+
+            menu.ShowAt(element);
+        }
+
+        private async void ToggleMute(TopicItem topic)
+        {
+            bool muted = !topic.Muted;
+
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                await Topics.SetMutedAsync(client, _inputPeer, topic.Id, muted,
+                                           TelegramService.Info);
+
+                SetBusy(false, (muted ? "Muted " : "Unmuted ") + topic.Title + ".");
+
+                // Read back rather than flipped locally. The setting belongs to the
+                // account, and the list is cheap to fetch - where a local flip would
+                // disagree with the server the moment anything else changed it.
+                Load();
+            }
+            catch (Exception ex)
+            {
+                var rpc = ex as RpcException;
+                SetBusy(false, "Could not change mute: " +
+                               (rpc != null ? rpc.ErrorType : ex.Message));
+            }
         }
 
         private static string Shorten(string text)

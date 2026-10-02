@@ -28,7 +28,8 @@
                   ItemClick="Topic_Click">
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Grid Margin="0,8,0,8" Background="Transparent">
+                    <Grid Margin="0,8,0,8" Background="Transparent"
+                          Holding="Topic_Holding">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -63,6 +64,18 @@
                                 <TextBlock Text="closed" FontSize="12" Opacity="0.55"
                                            Margin="8,7,0,0"
                                            Visibility="{Binding ClosedVisibility}"/>
+                                <!-- The same crossed-out speaker the chat list
+                                     draws, and drawn for the same reason: a word
+                                     costs a piece of the title, and this platform
+                                     has no icon font that can be relied on. -->
+                                <Canvas Width="17" Height="12" Opacity="0.65"
+                                        Margin="8,7,0,0" VerticalAlignment="Center"
+                                        Visibility="{Binding MutedVisibility}">
+                                    <Path Fill="Red"
+                                          Data="M0,4 L2.5,4 L6,0.5 L6,11.5 L2.5,8 L0,8 Z"/>
+                                    <Path Stroke="Red" StrokeThickness="1.4"
+                                          Data="M9.5,3.5 L15.5,8.5 M15.5,3.5 L9.5,8.5"/>
+                                </Canvas>
                             </StackPanel>
                             <TextBlock Text="{Binding Preview}" Opacity="0.6"
                                        FontSize="{StaticResource AppSubtleFontSize}"

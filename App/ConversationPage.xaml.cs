@@ -16,6 +16,27 @@ using Lumigram.Tl;
 
 namespace LumigramPlus.App
 {
+    /// <summary>
+    /// How far one of our own messages has got.
+    ///
+    /// Two signals exist, not three. Telegram has no delivery receipt a client can
+    /// read: a message is on the server or it is not, and separately the dialog
+    /// carries the highest of our messages the other side has read. So the middle
+    /// state of the usual three-mark scheme has nothing to drive it, and what is
+    /// shown is the pair Telegram's own clients show - on its way, sent, read.
+    /// </summary>
+    public enum MessageTicks
+    {
+        /// <summary>Put on screen, not yet acknowledged by the server.</summary>
+        Sending = 0,
+
+        /// <summary>The server has it and gave it an id.</summary>
+        Sent = 1,
+
+        /// <summary>The other side's read marker has passed it.</summary>
+        Read = 2,
+    }
+
     /// <summary>One message in a conversation.</summary>
     public sealed class MessageItem : System.ComponentModel.INotifyPropertyChanged
     {
@@ -32,6 +53,87 @@ namespace LumigramPlus.App
         public string Text { get; set; }
         public string Time { get; set; }
         public bool Out { get; set; }
+
+        private MessageTicks _ticks;
+
+        /// <summary>
+        /// How far this message has got, for our own messages.
+        ///
+        /// Raises changes, because it moves while the message is on screen: twice
+        /// for one sent here - acknowledged, then read - and once for an older one
+        /// when the other side catches up.
+        /// </summary>
+        public MessageTicks Ticks
+        {
+            get { return _ticks; }
+            set
+            {
+                if (_ticks == value) return;
+
+                _ticks = value;
+                Raise("Ticks");
+                Raise("TickVisibility");
+                Raise("SingleTickVisibility");
+                Raise("DoubleTickVisibility");
+                Raise("TickBrush");
+            }
+        }
+
+        /// <summary>
+        /// Only on our own messages. What the other side has read of *their* own
+        /// messages is not something we are told, and would be no use if we were.
+        /// </summary>
+        public Visibility TickVisibility
+        {
+            get { return Out ? Visibility.Visible : Visibility.Collapsed; }
+        }
+
+        /// <summary>One mark: on its way, or sent.</summary>
+        public Visibility SingleTickVisibility
+        {
+            get
+            {
+                return Out && Ticks != MessageTicks.Read ? Visibility.Visible
+                                                         : Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>Two marks: read.</summary>
+        public Visibility DoubleTickVisibility
+        {
+            get
+            {
+                return Out && Ticks == MessageTicks.Read ? Visibility.Visible
+                                                         : Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>
+        /// Green once read, white once sent, and faint until then.
+        ///
+        /// The colours are chosen against the outgoing bubble, which is the only
+        /// background these are ever drawn on.
+        /// </summary>
+        public Brush TickBrush
+        {
+            get
+            {
+                if (Ticks == MessageTicks.Read) return ReadTickBrush;
+                return Ticks == MessageTicks.Sent ? SentTickBrush : SendingTickBrush;
+            }
+        }
+
+        private static readonly Brush SendingTickBrush =
+            new SolidColorBrush(Color.FromArgb(110, 255, 255, 255));
+
+        private static readonly Brush SentTickBrush =
+            new SolidColorBrush(Colors.White);
+
+        // A light green rather than a dark one: these sit on the blue outgoing
+        // bubble, and a saturated green against that blue is two strong colours
+        // of similar darkness, which is hard to read at this size.
+        private static readonly Brush ReadTickBrush =
+            new SolidColorBrush(Color.FromArgb(255, 124, 252, 138));
         public string SenderName { get; set; }
 
         /// <summary>The attachment, when there is one.</summary>
@@ -140,6 +242,26 @@ namespace LumigramPlus.App
         public Visibility RevokeVisibility
         {
             get { return ActionVisibility; }
+        }
+
+        /// <summary>
+        /// Whether this message can be edited.
+        ///
+        /// Our own, sent, and with words in it. The server also has a time limit and
+        /// will refuse an old one - that is left to the server rather than guessed
+        /// at here, because the limit differs between a chat and a channel and
+        /// hiding the item on a wrong guess is worse than a refusal that says why.
+        ///
+        /// Attachments are left out: this edits text, and offering "edit" on a
+        /// photo would promise something that does not happen.
+        /// </summary>
+        public Visibility EditVisibility
+        {
+            get
+            {
+                return Out && Id != 0 && !string.IsNullOrEmpty(Text)
+                    ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         /// <summary>
@@ -287,6 +409,15 @@ namespace LumigramPlus.App
         /// <summary>Whether messages here have t.me addresses at all.</summary>
         private bool _canLink;
 
+        /// <summary>
+        /// The newest message of ours the other side has read.
+        ///
+        /// Comes from the chat list on the way in, and is refreshed from the dialog
+        /// poll that already runs - rather than by asking for it, which would be a
+        /// second request every few seconds for one integer.
+        /// </summary>
+        private int _readOutbox;
+
         public ConversationPage()
         {
             InitializeComponent();
@@ -391,6 +522,17 @@ namespace LumigramPlus.App
                     client, 20, 0, 0, null, TelegramService.Info);
 
                 Notifications.Observe(page.Entries);
+
+                // This chat is in that list, and its entry carries how much of ours
+                // the other side has read - so the marks follow a request already
+                // being made rather than one of their own.
+                foreach (DialogEntry d in page.Entries)
+                {
+                    if (d.PeerId != _peer.PeerId || d.Kind != _peer.Kind) continue;
+
+                    AdvanceReadMarks(d.ReadOutboxMaxId);
+                    break;
+                }
             }
             catch (Exception)
             {
@@ -421,6 +563,7 @@ namespace LumigramPlus.App
             // Only a channel or supergroup. A basic group cannot be made public, and
             // a one-to-one conversation has no addressable messages at all.
             _canLink = _peer.Kind == "channel";
+            _readOutbox = _peer.ReadOutboxMaxId;
 
             // Messages arriving for the chat on screen must not announce themselves.
             Notifications.OpenPeerId = _peer.PeerId;
@@ -737,6 +880,8 @@ namespace LumigramPlus.App
                 SenderName = SenderFor(m),
                 Media = m.Media,
                 CanLink = _canLink,
+                Ticks = m.Out && m.Id != 0 && m.Id <= _readOutbox
+                    ? MessageTicks.Read : MessageTicks.Sent,
             };
 
             if (m.Media != null)
@@ -1177,6 +1322,14 @@ namespace LumigramPlus.App
         /// <summary>The message the next send will answer, or 0 for none.</summary>
         private int _replyTo;
 
+        /// <summary>
+        /// The message being edited, or 0 when the box sends a new one.
+        ///
+        /// What makes the send button mean two different things, which is why it is
+        /// cleared on every path out of an edit - cancelled, sent, or failed.
+        /// </summary>
+        private int _editingId;
+
         private void ReplyMenu_Click(object sender, RoutedEventArgs e)
         {
             MessageItem item = MenuItem(sender);
@@ -1199,6 +1352,54 @@ namespace LumigramPlus.App
         private void CancelReply_Click(object sender, RoutedEventArgs e)
         {
             ClearReply();
+        }
+
+        /// <summary>
+        /// Puts a message into the box to be changed.
+        ///
+        /// Replying is cancelled on the way in. The box can only do one thing at a
+        /// time, and an armed reply left showing while an edit is in progress would
+        /// be a promise about where the next text goes that is no longer true.
+        /// </summary>
+        private void EditMenu_Click(object sender, RoutedEventArgs e)
+        {
+            MessageItem item = MenuItem(sender);
+            if (item == null || item.Id == 0 || string.IsNullOrEmpty(item.Text)) return;
+
+            ClearReply();
+
+            _editingId = item.Id;
+            EditText.Text = item.Text;
+            EditBar.Visibility = Visibility.Visible;
+
+            ComposeBox.Text = item.Text;
+            ComposeBox.Focus(FocusState.Programmatic);
+
+            // At the end rather than selected: an edit is usually an addition or a
+            // typo, and arriving with the whole message selected means the first
+            // keystroke throws it away.
+            ComposeBox.SelectionStart = ComposeBox.Text.Length;
+            ComposeBox.SelectionLength = 0;
+        }
+
+        private void CancelEdit_Click(object sender, RoutedEventArgs e)
+        {
+            ClearEdit(true);
+        }
+
+        /// <summary>
+        /// Leaves edit mode.
+        ///
+        /// <paramref name="emptyBox"/> is false when the text has already been taken
+        /// and sent: clearing it then would be clearing a box the send path has
+        /// already emptied, and doing it twice is how a retry loses the message.
+        /// </summary>
+        private void ClearEdit(bool emptyBox)
+        {
+            _editingId = 0;
+            EditBar.Visibility = Visibility.Collapsed;
+
+            if (emptyBox) ComposeBox.Text = "";
         }
 
         private void ClearReply()
@@ -1778,6 +1979,8 @@ namespace LumigramPlus.App
                 Time = DateTime.Now.ToString("HH:mm"),
                 Out = true,
                 MediaNote = "sending " + file.Name + "...",
+                CanLink = _canLink,
+                Ticks = MessageTicks.Sending,
             };
 
             _messages.Add(pending);
@@ -1941,6 +2144,24 @@ namespace LumigramPlus.App
 
             _sending = true;
 
+            // An edit, not a send. Taken and cleared before anything else, so a
+            // failure cannot leave the box still pointed at a message the user has
+            // moved on from.
+            if (_editingId != 0)
+            {
+                int editing = _editingId;
+                ClearEdit(false);
+
+                ComposeBox.Text = "";
+                SendButton.IsEnabled = false;
+
+                await EditAsync(editing, text);
+
+                _sending = false;
+                SendButton.IsEnabled = true;
+                return;
+            }
+
             // Taken before the bar is cleared, so a failure below does not leave the
             // next message answering something the user has moved on from.
             int replyTo = _replyTo;
@@ -1957,6 +2178,8 @@ namespace LumigramPlus.App
                 Text = text,
                 Time = DateTime.Now.ToString("HH:mm"),
                 Out = true,
+                CanLink = _canLink,
+                Ticks = MessageTicks.Sending,
             };
 
             _messages.Add(pending);
@@ -1972,6 +2195,10 @@ namespace LumigramPlus.App
                 // it by and it is added a second time.
                 pending.Id = await Messages.SendTextAsync(
                     client, TelegramService.Crypto, _inputPeer, text, replyTo, _topicId);
+
+                // The id is the acknowledgement, so this is the moment the first
+                // mark is earned. The second waits on the other side.
+                pending.Ticks = MessageTicks.Sent;
 
                 SetBusy(false, "");
             }
@@ -2027,6 +2254,97 @@ namespace LumigramPlus.App
             // also what lets the poll start adding new messages again.
             _focusId = 0;
             Load();
+        }
+
+        /// <summary>
+        /// Sends the changed text, and puts it on screen.
+        ///
+        /// The bubble is updated here rather than waiting for the refresh: the poll
+        /// matches messages by id and the id has not changed, so an edited message
+        /// is not something it would notice. Rebuilding the collection is how the
+        /// new text is picked up, because MessageItem.Text raises no change.
+        /// </summary>
+        private async Task EditAsync(int messageId, string text)
+        {
+            SetBusy(true, "Saving...");
+
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+
+                await Messages.EditTextAsync(client, _inputPeer, messageId, text,
+                                             TelegramService.Info);
+
+                foreach (MessageItem item in _messages)
+                {
+                    if (item.Id != messageId) continue;
+
+                    item.Text = text;
+                    break;
+                }
+
+                var all = new List<MessageItem>(_messages);
+                _messages.Clear();
+                foreach (MessageItem item in all) _messages.Add(item);
+
+                SetBusy(false, "");
+            }
+            catch (Exception ex)
+            {
+                var rpc = ex as RpcException;
+                string trouble = rpc != null ? rpc.ErrorType : ex.Message;
+
+                // The two the server actually answers with, said in words. Anything
+                // else is reported as it came.
+                if (trouble != null && trouble.Contains("MESSAGE_EDIT_TIME_EXPIRED"))
+                    trouble = "Too late to edit that message.";
+                else if (trouble != null && trouble.Contains("MESSAGE_NOT_MODIFIED"))
+                    trouble = "";
+                else if (trouble != null && trouble.Contains("MESSAGE_AUTHOR_REQUIRED"))
+                    trouble = "Only the author can edit that message.";
+                else
+                    trouble = "Not saved: " + trouble;
+
+                SetBusy(false, trouble);
+
+                // Armed again, not merely put back in the box. Restoring the text
+                // alone would leave the box looking like an edit in progress while
+                // the send button had quietly gone back to meaning "send", so the
+                // obvious second attempt would post a new message instead.
+                if (trouble.Length > 0) RearmEdit(messageId, text);
+            }
+        }
+
+        /// <summary>Puts a failed edit back the way it was, ready to try again.</summary>
+        private void RearmEdit(int messageId, string text)
+        {
+            _editingId = messageId;
+            EditBar.Visibility = Visibility.Visible;
+
+            ComposeBox.Text = text;
+            ComposeBox.SelectionStart = ComposeBox.Text.Length;
+            ComposeBox.SelectionLength = 0;
+        }
+
+        /// <summary>
+        /// Moves the read marker forward, and marks the messages it has passed.
+        ///
+        /// Only ever forward. The dialog poll and the chat list can disagree for a
+        /// moment, and a marker that went backwards would un-read messages on
+        /// screen - which looks like a bug whichever way it is actually wrong.
+        /// </summary>
+        private void AdvanceReadMarks(int readOutboxMaxId)
+        {
+            if (readOutboxMaxId <= _readOutbox) return;
+
+            _readOutbox = readOutboxMaxId;
+
+            foreach (MessageItem item in _messages)
+            {
+                if (!item.Out || item.Id == 0 || item.Id > _readOutbox) continue;
+
+                item.Ticks = MessageTicks.Read;
+            }
         }
 
         private void ScrollToEnd()

@@ -38,6 +38,18 @@ namespace Lumigram.Mtproto
         public bool Pinned;
         public bool Hidden;
 
+        /// <summary>
+        /// When this topic's own mute expires, or 0 when it has no setting of its
+        /// own and follows the forum.
+        ///
+        /// Expressed as a time rather than a flag, like a chat's - and read back
+        /// from the server rather than stored here, because the setting belongs to
+        /// the account and a topic muted on another device should be quiet here.
+        /// </summary>
+        public int MutedUntil;
+
+        public bool IsMuted(int nowUtc) { return MutedUntil > nowUtc; }
+
         /// <summary>Text of the topic's newest message, when the server sent it.</summary>
         public string LastText;
 
@@ -158,6 +170,9 @@ namespace Lumigram.Mtproto
                     Pinned = t.Flag("flags", 3),
                     Hidden = t.Flag("flags", 6),
                 };
+
+                if (t.Has("notify_settings"))
+                    topic.MutedUntil = t.Obj("notify_settings").IntOr("mute_until", 0);
 
                 if (string.IsNullOrEmpty(topic.Title))
                     topic.Title = topic.IsGeneral ? "General" : "topic " + topic.Id;
@@ -295,6 +310,115 @@ namespace Lumigram.Mtproto
             TlReader r = await client.InvokeAsync(q.ToArray(), info);
             TlSchema.ReadObject(r);
         }
+
+        /// <summary>
+        /// Mutes or unmutes one topic.
+        ///
+        /// inputNotifyForumTopic rather than inputNotifyPeer: the peer form is the
+        /// whole forum, so using it here would silence every thread in it. Settings
+        /// cascade from topic to chat to account, and writing one here is what gives
+        /// this topic an answer of its own.
+        /// </summary>
+        public static async Task SetMutedAsync(MtprotoClient client, byte[] inputPeer,
+                                               int topicId, bool muted,
+                                               ClientInfo info = null)
+        {
+            TlReader r = await client.InvokeAsync(
+                MuteBody(inputPeer, topicId, muted), info);
+
+            r.ReadBool();
+        }
+
+        /// <summary>
+        /// The account.updateNotifySettings payload for one topic.
+        ///
+        /// Separated to be checked without a connection: the peer and the thread id
+        /// sit next to each other inside the boxed InputNotifyPeer, and a client
+        /// that writes them the other way round mutes whatever channel happens to
+        /// have the thread's id.
+        /// </summary>
+        public static byte[] MuteBody(byte[] inputPeer, int topicId, bool muted)
+        {
+            var settings = new TlWriter(32);
+            settings.WriteConstructor(TlConstructors.InputPeerNotifySettings)
+                    .WriteInt(1 << 2)                   // only mute_until is set
+                    .WriteInt(muted ? int.MaxValue : 0);
+
+            var q = new TlWriter(96);
+            q.WriteConstructor(TlConstructors.AccountUpdateNotifySettings)
+             .WriteConstructor(TlConstructors.InputNotifyForumTopic)
+             .WriteRaw(inputPeer)
+             .WriteInt(topicId)
+             .WriteRaw(settings.ToArray());
+
+            return q.ToArray();
+        }
+
+        /// <summary>
+        /// Mutes or unmutes every topic in a forum, and the forum itself.
+        ///
+        /// Both halves are needed and neither is enough. Setting the forum alone
+        /// leaves any topic the user has already given its own setting - which is
+        /// the whole point of having had that setting - so a muted forum would go on
+        /// notifying from those. Setting the topics alone leaves topics created
+        /// later unmuted, because a new one has no setting and follows the forum.
+        ///
+        /// One request per topic, which is why it reports progress: a busy forum has
+        /// dozens, and silence on a phone connection is indistinguishable from a
+        /// hang.
+        /// </summary>
+        public static async Task<int> SetAllMutedAsync(MtprotoClient client,
+                                                       string kind, long peerId,
+                                                       long accessHash, bool muted,
+                                                       Action<int, int> progress = null,
+                                                       ClientInfo info = null)
+        {
+            byte[] inputPeer = Messages.InputPeerFor(kind, peerId, accessHash);
+
+            // The forum first, so that if the per-topic pass is interrupted the
+            // setting that governs everything without an override is already right.
+            await Messages.SetMutedAsync(client, kind, peerId, accessHash, muted, info);
+
+            var ids = new List<int>();
+
+            int offsetDate = 0, offsetId = 0, offsetTopic = 0;
+            for (int page = 0; page < MutePages; page++)
+            {
+                TopicPage list = await GetAsync(client, inputPeer, MutePageSize,
+                                               offsetDate, offsetId, offsetTopic, info);
+
+                foreach (ForumTopic t in list.Topics) ids.Add(t.Id);
+
+                if (!list.HasMore || list.Topics.Count == 0) break;
+
+                offsetDate = list.NextOffsetDate;
+                offsetId = list.NextOffsetId;
+                offsetTopic = list.NextOffsetTopic;
+            }
+
+            int done = 0;
+            foreach (int id in ids)
+            {
+                try
+                {
+                    await SetMutedAsync(client, inputPeer, id, muted, info);
+                }
+                catch (RpcException)
+                {
+                    // One topic refusing - deleted between the list and here, most
+                    // likely - is not a reason to leave the rest as they were.
+                }
+
+                done++;
+                if (progress != null) progress(done, ids.Count);
+            }
+
+            return done;
+        }
+
+        /// <summary>How far to page when collecting topics to mute.</summary>
+        private const int MutePages = 5;
+        private const int MutePageSize = 100;
 
         /// <summary>
         /// Sends text into a topic, returning the id the server assigned it.

@@ -230,6 +230,21 @@ namespace Lumigram.Tl
         // channel would clear every topic at once.
         public const uint MessagesReadDiscussion = 0xf731a9f4;
 
+        // inputNotifyForumTopic#5c467992 peer:InputPeer top_msg_id:int
+        //   = InputNotifyPeer
+        //
+        // Notification settings for one thread. Settings cascade - a topic with
+        // none of its own follows the channel's - so this is both how one topic is
+        // silenced on its own and how an override is put back.
+        public const uint InputNotifyForumTopic = 0x5c467992;
+
+        // messages.editMessage#b106e66c flags:# ... peer:InputPeer id:int
+        //   message:flags.11?string media:flags.14?InputMedia ...
+        //
+        // The text is flags.11, not a plain field: an edit that changes only the
+        // media sends no text at all, so the bit has to be set rather than assumed.
+        public const uint MessagesEditMessage = 0xb106e66c;
+
         // ---- voice calls -------------------------------------------------
 
         // messages.getDhConfig#26cf8950 version:int random_length:int

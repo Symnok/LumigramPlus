@@ -93,6 +93,14 @@
                             <TextBlock Text="{Binding UnreadCount}" Foreground="White"
                                        FontSize="{StaticResource AppSubtleFontSize}"/>
                         </Border>
+
+                        <!-- A forum instead gets this: something inside is unread,
+                             and the counts that mean anything are per topic. The
+                             two share the column and are never both shown. -->
+                        <Ellipse Grid.Column="2" Width="14" Height="14"
+                                 Visibility="{Binding UnreadDotVisibility}"
+                                 Fill="{ThemeResource PhoneAccentBrush}"
+                                 VerticalAlignment="Center" Margin="0,0,4,0"/>
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

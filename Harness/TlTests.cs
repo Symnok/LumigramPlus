@@ -202,6 +202,61 @@ namespace Lumigram.Harness
                 }
             }
 
+            Section("editing and topic mute");
+            {
+                byte[] forum = Messages.InputPeerFor("channel", 555444, 0x1020304050607080L);
+                const int topic = 9876;
+
+                // Editing. message is flags.11, a long way from the low bits
+                // anything else here would set - and a wrong bit means the server
+                // reads the text as some other optional field, or reads no text at
+                // all and edits the message to empty.
+                {
+                    var r = new TlReader(Messages.EditTextBody(forum, 4321, "fixed"));
+
+                    Eq("edit ctor", TlConstructors.MessagesEditMessage, r.ReadConstructor());
+                    Eq("edit flags", 1 << 11, r.ReadInt());
+                    Eq("edit peer", TlConstructors.InputPeerChannel, r.ReadConstructor());
+                    r.ReadLong(); r.ReadLong();
+                    Eq("edit id", 4321, r.ReadInt());
+                    Eq("edit text", "fixed", r.ReadString());
+                    Eq("edit consumed", 0, r.Remaining);
+                }
+
+                // Muting one topic. The thread id sits after the peer inside the
+                // boxed InputNotifyPeer; written the other way round this mutes
+                // whatever channel happens to have the thread's id.
+                {
+                    var r = new TlReader(Topics.MuteBody(forum, topic, true));
+
+                    Eq("mute ctor", TlConstructors.AccountUpdateNotifySettings,
+                       r.ReadConstructor());
+                    Eq("mute scope", TlConstructors.InputNotifyForumTopic, r.ReadConstructor());
+                    Eq("mute peer", TlConstructors.InputPeerChannel, r.ReadConstructor());
+                    r.ReadLong(); r.ReadLong();
+                    Eq("mute thread", topic, r.ReadInt());
+                    Eq("mute settings", TlConstructors.InputPeerNotifySettings,
+                       r.ReadConstructor());
+                    Eq("mute flags", 1 << 2, r.ReadInt());
+                    Eq("mute until", int.MaxValue, r.ReadInt());
+                    Eq("mute consumed", 0, r.Remaining);
+                }
+
+                // ...and unmuting is the same message with the time at zero, not a
+                // different request and not an absent field.
+                {
+                    var r = new TlReader(Topics.MuteBody(forum, topic, false));
+
+                    r.ReadConstructor(); r.ReadConstructor(); r.ReadConstructor();
+                    r.ReadLong(); r.ReadLong();
+                    Eq("unmute thread", topic, r.ReadInt());
+                    r.ReadConstructor();
+                    Eq("unmute flags", 1 << 2, r.ReadInt());
+                    Eq("unmute until", 0, r.ReadInt());
+                    Eq("unmute consumed", 0, r.Remaining);
+                }
+            }
+
             Section("byte strings and padding");
             {
                 // Lengths around every boundary that changes the encoding.
