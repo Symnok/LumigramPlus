@@ -535,6 +535,7 @@ namespace LumigramPlus.App
             foreach (DialogItem item in _all)
             {
                 if (!Shows(item, now)) continue;
+                if (!Matches(item)) continue;
                 _dialogs.Add(item);
             }
 
@@ -607,6 +608,69 @@ namespace LumigramPlus.App
                 _loadingMore = false;
                 LoadMoreButton.IsEnabled = true;
             }
+        }
+
+        // ---- search ------------------------------------------------------------
+
+        /// <summary>
+        /// What the list is narrowed to, or empty for everything.
+        ///
+        /// Applied inside ApplyFolder rather than to the list on screen, because
+        /// every way the list is rebuilt - folder tabs, the poll every few seconds,
+        /// loading more - goes through there. Filtering the visible list instead
+        /// would hold until the next poll and then quietly undo itself.
+        /// </summary>
+        private string _search = "";
+
+        /// <summary>
+        /// Opens the search box, or closes it and puts the list back.
+        ///
+        /// Closing clears it. A search box that is out of sight but still filtering
+        /// is a chat list with chats missing for no visible reason.
+        /// </summary>
+        private void Search_Click(object sender, RoutedEventArgs e)
+        {
+            if (SearchBox.Visibility == Visibility.Visible)
+            {
+                SearchBox.Text = "";
+                SearchBox.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            SearchBox.Visibility = Visibility.Visible;
+            SearchBox.Focus(FocusState.Programmatic);
+        }
+
+        private void Search_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            string text = (SearchBox.Text ?? "").Trim();
+
+            // A leading @ is how people write a username; the stored one has none.
+            if (text.StartsWith("@")) text = text.Substring(1);
+
+            if (text == _search) return;
+
+            _search = text;
+            ApplyFolder();
+        }
+
+        /// <summary>
+        /// Whether a chat answers the search: its name, or its @username, anywhere
+        /// in it and in any case.
+        ///
+        /// Anywhere rather than from the start, because a chat is as likely to be
+        /// remembered by its second word as its first.
+        /// </summary>
+        private bool Matches(DialogItem item)
+        {
+            if (_search.Length == 0) return true;
+
+            if (item.Title != null &&
+                item.Title.IndexOf(_search, StringComparison.CurrentCultureIgnoreCase) >= 0)
+                return true;
+
+            return item.Username != null &&
+                   item.Username.IndexOf(_search, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private bool Shows(DialogItem item, int now)

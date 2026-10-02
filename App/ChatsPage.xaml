@@ -31,6 +31,15 @@
         </ScrollViewer>
 
         <StackPanel Grid.Row="2" Margin="0,0,0,8">
+            <!--
+              Narrows the list to chats whose name matches, as it is typed. Only
+              the chats already loaded are searched - this asks the server nothing -
+              which is what makes it instant; finding somebody new is what "find"
+              next to it is for.
+            -->
+            <TextBox x:Name="SearchBox" Visibility="Collapsed" Margin="0,0,0,4"
+                     PlaceholderText="search chats" InputScope="Search"
+                     TextChanged="Search_TextChanged"/>
             <ProgressBar x:Name="Busy" IsIndeterminate="True" Visibility="Collapsed"/>
             <TextBlock x:Name="StatusText" TextWrapping="Wrap" Opacity="0.7" FontSize="14"/>
         </StackPanel>
@@ -135,6 +144,8 @@
     <Page.BottomAppBar>
         <CommandBar>
             <AppBarButton Icon="Refresh" Label="refresh" Click="Refresh_Click"/>
+            <AppBarButton x:Name="SearchButton" Icon="Find" Label="search"
+                          Click="Search_Click"/>
             <AppBarButton Icon="Add" Label="find" Click="Find_Click"/>
             <AppBarButton Icon="Setting" Label="settings" Click="Settings_Click"/>
         </CommandBar>

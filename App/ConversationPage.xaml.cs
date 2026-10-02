@@ -50,7 +50,30 @@ namespace LumigramPlus.App
         }
 
         public int Id { get; set; }
-        public string Text { get; set; }
+        private string _text;
+
+        /// <summary>
+        /// The message's words.
+        ///
+        /// Raises changes, because it can change on screen - an edit, or a send
+        /// that failed - and the alternative used to be rebuilding the whole list
+        /// to pick the new text up, which threw the reader back to the top.
+        ///
+        /// The body itself is built from inlines rather than bound, so a change here
+        /// does not redraw it on its own; ConversationPage.RefreshBody does that.
+        /// </summary>
+        public string Text
+        {
+            get { return _text; }
+            set
+            {
+                _text = value;
+                Raise("Text");
+                Raise("TextVisibility");
+                Raise("CopyVisibility");
+                Raise("EditVisibility");
+            }
+        }
         public string Time { get; set; }
         public bool Out { get; set; }
 
@@ -435,12 +458,53 @@ namespace LumigramPlus.App
             InputPane pane = InputPane.GetForCurrentView();
             pane.Showing += OnKeyboardShowing;
             pane.Hiding += OnKeyboardHiding;
+
+            ArmBarButtons();
+        }
+
+        /// <summary>
+        /// Makes the buttons on the reply and edit bars answer the first tap.
+        ///
+        /// They sit inside the page, just above the message box, which is exactly
+        /// where the note on the app bar says a button cannot be: with the keyboard
+        /// up, a tap takes focus from the box, the keyboard goes, the page drops
+        /// back down, and the button has moved out from under the finger before it
+        /// is released - so Click never comes and the first press only closes the
+        /// keyboard.
+        ///
+        /// So these act when the finger lands rather than when it lifts. That is
+        /// before focus moves and before anything re-lays out, which makes it
+        /// immune to the whole sequence rather than racing it.
+        ///
+        /// handledEventsToo, because a Button marks its own PointerPressed handled
+        /// and a handler attached the ordinary way would never be called.
+        /// </summary>
+        private void ArmBarButtons()
+        {
+            CancelReplyButton.AddHandler(UIElement.PointerPressedEvent,
+                new Windows.UI.Xaml.Input.PointerEventHandler(
+                    delegate { ClearReply(); }), true);
+
+            CancelEditButton.AddHandler(UIElement.PointerPressedEvent,
+                new Windows.UI.Xaml.Input.PointerEventHandler(
+                    delegate { ClearEdit(true); }), true);
+
+            // Send rather than EditAsync directly: the send path already knows to
+            // edit while the bar is up, and has the guard against a second press.
+            ConfirmEditButton.AddHandler(UIElement.PointerPressedEvent,
+                new Windows.UI.Xaml.Input.PointerEventHandler(
+                    delegate { Send(); }), true);
         }
 
         private void OnKeyboardShowing(InputPane sender, InputPaneVisibilityEventArgs args)
         {
             args.EnsuredFocusedElementInView = true;
             Root.Margin = new Thickness(0, 0, 0, args.OccludedRect.Height);
+
+            // The list has just lost half its height. Editing means looking at one
+            // message, so that is the one kept in view rather than whatever the
+            // shrink happened to leave there.
+            if (_editingItem != null) BringIntoView(_editingItem);
         }
 
         private void OnKeyboardHiding(InputPane sender, InputPaneVisibilityEventArgs args)
@@ -1330,6 +1394,11 @@ namespace LumigramPlus.App
         /// </summary>
         private int _editingId;
 
+        /// <summary>
+        /// The bubble being edited, so it can be kept on screen above the bar.
+        /// </summary>
+        private MessageItem _editingItem;
+
         private void ReplyMenu_Click(object sender, RoutedEventArgs e)
         {
             MessageItem item = MenuItem(sender);
@@ -1349,11 +1418,6 @@ namespace LumigramPlus.App
             ComposeBox.Focus(FocusState.Programmatic);
         }
 
-        private void CancelReply_Click(object sender, RoutedEventArgs e)
-        {
-            ClearReply();
-        }
-
         /// <summary>
         /// Puts a message into the box to be changed.
         ///
@@ -1369,8 +1433,15 @@ namespace LumigramPlus.App
             ClearReply();
 
             _editingId = item.Id;
+            _editingItem = item;
             EditText.Text = item.Text;
             EditBar.Visibility = Visibility.Visible;
+
+            // The keyboard is about to take half the screen, and without this the
+            // message being changed is usually underneath it. Done again once the
+            // keyboard is up - see OnKeyboardShowing - because that is when the
+            // space it has to fit in is actually known.
+            BringIntoView(item);
 
             ComposeBox.Text = item.Text;
             ComposeBox.Focus(FocusState.Programmatic);
@@ -1380,11 +1451,6 @@ namespace LumigramPlus.App
             // keystroke throws it away.
             ComposeBox.SelectionStart = ComposeBox.Text.Length;
             ComposeBox.SelectionLength = 0;
-        }
-
-        private void CancelEdit_Click(object sender, RoutedEventArgs e)
-        {
-            ClearEdit(true);
         }
 
         /// <summary>
@@ -1397,6 +1463,7 @@ namespace LumigramPlus.App
         private void ClearEdit(bool emptyBox)
         {
             _editingId = 0;
+            _editingItem = null;
             EditBar.Visibility = Visibility.Collapsed;
 
             if (emptyBox) ComposeBox.Text = "";
@@ -2208,12 +2275,7 @@ namespace LumigramPlus.App
                 SetBusy(false, "Not sent: " + (rpc != null ? rpc.ErrorType : ex.Message));
 
                 pending.Text = text + "  (not sent)";
-
-                // The item has no change notification, so the list is rebuilt to
-                // pick the new text up.
-                var all = new List<MessageItem>(_messages);
-                _messages.Clear();
-                foreach (MessageItem item in all) _messages.Add(item);
+                RefreshBody(pending);
             }
             finally
             {
@@ -2275,17 +2337,17 @@ namespace LumigramPlus.App
                 await Messages.EditTextAsync(client, _inputPeer, messageId, text,
                                              TelegramService.Info);
 
-                foreach (MessageItem item in _messages)
+                MessageItem edited = FindItem(messageId);
+                if (edited != null)
                 {
-                    if (item.Id != messageId) continue;
+                    edited.Text = text;
+                    RefreshBody(edited);
 
-                    item.Text = text;
-                    break;
+                    // Left where it is. This used to rebuild the whole list to pick
+                    // the new text up, which reset the scroll and threw the reader
+                    // to the top of the conversation.
+                    BringIntoView(edited);
                 }
-
-                var all = new List<MessageItem>(_messages);
-                _messages.Clear();
-                foreach (MessageItem item in all) _messages.Add(item);
 
                 SetBusy(false, "");
             }
@@ -2315,10 +2377,76 @@ namespace LumigramPlus.App
             }
         }
 
+        private MessageItem FindItem(int messageId)
+        {
+            foreach (MessageItem item in _messages)
+                if (item.Id == messageId) return item;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Redraws one message's body after its text has changed.
+        ///
+        /// The body is built from runs and links in code, not bound, so changing the
+        /// text does not redraw it. Only the one bubble is touched: the list, its
+        /// scroll position and every other bubble stay exactly as they were.
+        ///
+        /// A bubble that is not on screen has no container and nothing to redraw -
+        /// it will be built from the new text when it is scrolled back to, by the
+        /// same DataContextChanged path that builds every recycled bubble.
+        /// </summary>
+        private void RefreshBody(MessageItem item)
+        {
+            var container = MessageList.ContainerFromItem(item) as DependencyObject;
+            if (container == null) return;
+
+            FillInlines(FindNamed<TextBlock>(container, "MessageText"));
+        }
+
+        private static T FindNamed<T>(DependencyObject parent, string name)
+            where T : FrameworkElement
+        {
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+
+                var match = child as T;
+                if (match != null && match.Name == name) return match;
+
+                T deeper = FindNamed<T>(child, name);
+                if (deeper != null) return deeper;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Scrolls one message into view, once layout has caught up.
+        ///
+        /// Low priority so it runs after whatever is changing the layout right now -
+        /// the keyboard arriving, or a bubble growing by a line - and scrolls to
+        /// where the message ends up rather than where it was.
+        /// </summary>
+        private void BringIntoView(MessageItem item)
+        {
+            if (item == null) return;
+
+            var ignored = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low,
+                delegate
+                {
+                    MessageList.UpdateLayout();
+                    MessageList.ScrollIntoView(item);
+                });
+        }
+
         /// <summary>Puts a failed edit back the way it was, ready to try again.</summary>
         private void RearmEdit(int messageId, string text)
         {
             _editingId = messageId;
+            _editingItem = FindItem(messageId);
             EditBar.Visibility = Visibility.Visible;
 
             ComposeBox.Text = text;
