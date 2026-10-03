@@ -1,4 +1,6 @@
 using System;
+using Lumigram.Audio;
+
 using Lumigram.Crypto;
 using Lumigram.Mtproto;
 using Lumigram.Tl;
@@ -343,6 +345,135 @@ namespace Lumigram.Harness
                     Eq("read second", Reactions.Heart, read[1].Emoticon);
                     Eq("read second count", 1, read[1].Count);
                     Eq("read second mine", false, read[1].Mine);
+                }
+            }
+
+            Section("voice message timing");
+            {
+                // Every table-of-contents byte Opus defines, checked against the
+                // decoder's own reading of it - an answer from outside this project.
+                // For the "arbitrary count" layout, every frame count too. Where the
+                // decoder calls a packet invalid, ours must say it holds nothing.
+                int compared = 0;
+                for (int toc = 0; toc < 256; toc++)
+                {
+                    int counts = (toc & 3) == 3 ? 64 : 1;
+
+                    for (int count = 0; count < counts; count++)
+                    {
+                        var packet = new byte[] { (byte)toc, (byte)count, 0, 0 };
+
+                        int theirs = Concentus.Structs.OpusPacketInfo.GetNumSamples(
+                            packet, 0, packet.Length, OpusTimeline.Rate);
+                        int ours = OpusTimeline.PacketSamples(packet);
+
+                        if (theirs > OpusTimeline.MaxPacketSamples) theirs = -1;
+                        Eq("opus toc " + toc + " count " + count,
+                           theirs < 0 ? 0 : theirs, ours);
+                        compared++;
+                    }
+                }
+                Eq("opus layouts compared", 64 * 64 + 192, compared);
+
+                // A message of 100 twenty-millisecond packets with the usual 312
+                // samples of pre-skip: two seconds of packets, a little less heard.
+                var stream = new OpusStream { PreSkip = 312 };
+                for (int i = 0; i < 100; i++) stream.Packets.Add(new byte[] { 0x08, 0, 0 });   // SILK NB 20 ms
+
+                var line = new OpusTimeline(stream);
+                Eq("timeline packets", 100, line.Count);
+                Eq("timeline total", 96000L, line.TotalSamples);
+                Eq("timeline duration", OpusTimeline.ToTime(96000 - 312), line.Duration);
+
+                int packet0; long skip0;
+                line.Locate(TimeSpan.Zero, 4, out packet0, out skip0);
+                Eq("start packet", 0, packet0);
+                Eq("start skips the pre-skip", 312L, skip0);
+
+                // One second in, no run-up: packet 50 starts at 48000, the target is
+                // 48000 + 312, so 312 samples of it are dropped.
+                int packet1; long skip1;
+                line.Locate(TimeSpan.FromSeconds(1), 0, out packet1, out skip1);
+                Eq("one second packet", 50, packet1);
+                Eq("one second skip", 312L, skip1);
+
+                // The same with four packets of run-up: decoding starts at packet 46
+                // and everything up to the target is thrown away.
+                int packet2; long skip2;
+                line.Locate(TimeSpan.FromSeconds(1), 4, out packet2, out skip2);
+                Eq("run-up packet", 46, packet2);
+                Eq("run-up skip", 48312L - 46 * 960, skip2);
+
+                // Past the end lands on the last packet rather than outside the list.
+                int packet3; long skip3;
+                line.Locate(TimeSpan.FromSeconds(30), 0, out packet3, out skip3);
+                Eq("past the end packet", 99, packet3);
+            }
+
+            Section("voice message playback");
+            {
+                // Two seconds of real Opus, made by the real encoder: 100 packets of
+                // 20 ms, with the 312 samples of pre-skip the reference encoder uses.
+                var stream = new OpusStream { Channels = 1, PreSkip = 312 };
+                var encoder = new Concentus.Structs.OpusEncoder(
+                    48000, 1, Concentus.Enums.OpusApplication.OPUS_APPLICATION_VOIP);
+
+                var frame = new short[960];
+                var buffer = new byte[1500];
+                for (int f = 0; f < 100; f++)
+                {
+                    for (int i = 0; i < 960; i++)
+                        frame[i] = (short)(8000 * Math.Sin(2 * Math.PI * 440 * (f * 960 + i) / 48000.0));
+
+                    int n = encoder.Encode(frame, 0, 960, buffer, 0, buffer.Length);
+                    var packet = new byte[n];
+                    Array.Copy(buffer, packet, n);
+                    stream.Packets.Add(packet);
+                }
+
+                long heard = 96000 - 312;
+
+                // Start to finish: every sample meant to be heard comes out exactly
+                // once, and each stretch starts where the last one ended - a gap or
+                // an overlap there is a click, or a slider that drifts.
+                {
+                    long total;
+                    bool contiguous;
+                    TimeSpan first;
+                    Play(stream, TimeSpan.Zero, out total, out contiguous, out first);
+
+                    Eq("whole message samples", heard, total);
+                    Eq("whole message contiguous", true, contiguous);
+                    Eq("whole message starts at zero", TimeSpan.Zero, first);
+                }
+
+                // From one second in: the first stretch is stamped one second, and
+                // exactly the rest of the message follows.
+                {
+                    long total;
+                    bool contiguous;
+                    TimeSpan first;
+                    Play(stream, TimeSpan.FromSeconds(1), out total, out contiguous, out first);
+
+                    Eq("seek first stamp", TimeSpan.FromSeconds(1), first);
+                    Eq("seek samples", heard - 48000, total);
+                    Eq("seek contiguous", true, contiguous);
+                }
+
+                // A damaged packet in the middle: the message still lasts exactly as
+                // long, so everything after it plays at the right time.
+                {
+                    var damaged = new OpusStream { Channels = 1, PreSkip = 312 };
+                    damaged.Packets.AddRange(stream.Packets);
+                    damaged.Packets[50] = new byte[] { stream.Packets[50][0], 0xFF, 0xFF, 0xFF };
+
+                    long total;
+                    bool contiguous;
+                    TimeSpan first;
+                    Play(damaged, TimeSpan.Zero, out total, out contiguous, out first);
+
+                    Eq("damaged packet samples", heard, total);
+                    Eq("damaged packet contiguous", true, contiguous);
                 }
             }
 
@@ -719,6 +850,41 @@ namespace Lumigram.Harness
                     gz.Write(data, 0, data.Length);
                 }
                 return ms.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// Plays a stream through OpusPlayback with the real decoder - the same calls
+        /// the phone makes - and reports what came out.
+        /// </summary>
+        private static void Play(OpusStream stream, TimeSpan start, out long total,
+                                 out bool contiguous, out TimeSpan first)
+        {
+            var decoder = new Concentus.Structs.OpusDecoder(48000, 1);
+            var playback = new OpusPlayback(stream, 1,
+                delegate (byte[] packet, short[] pcm, int max)
+                {
+                    return decoder.Decode(packet, 0, packet.Length, pcm, 0, max, false);
+                },
+                delegate { decoder.ResetState(); });
+
+            playback.Seek(start);
+
+            total = 0;
+            contiguous = true;
+            first = TimeSpan.MinValue;
+
+            TimeSpan expected = start;
+            int from, count;
+            TimeSpan at;
+
+            while (playback.Next(out from, out count, out at))
+            {
+                if (first == TimeSpan.MinValue) first = at;
+                if (at != expected) contiguous = false;
+
+                total += count;
+                expected = at + OpusTimeline.ToTime(count);
             }
         }
 

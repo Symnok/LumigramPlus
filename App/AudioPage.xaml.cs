@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.InteropServices.WindowsRuntime;
+using Windows.Storage;
 using Windows.System.Display;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -16,6 +18,12 @@ namespace LumigramPlus.App
 
         public string Title;
         public string Performer;
+
+        /// <summary>
+        /// A voice message: Opus in OGG, which the phone's player cannot open, so it
+        /// is decoded here as it plays - see VoiceFilePlayer.
+        /// </summary>
+        public bool IsVoice;
     }
 
     /// <summary>
@@ -46,6 +54,9 @@ namespace LumigramPlus.App
 
         private readonly DispatcherTimer _tick = new DispatcherTimer();
 
+        /// <summary>The decoder behind a voice message, or null for an ordinary file.</summary>
+        private VoiceFilePlayer _voice;
+
         /// <summary>
         /// Set while the slider is being moved by the timer rather than by a finger.
         ///
@@ -63,7 +74,7 @@ namespace LumigramPlus.App
             _tick.Tick += delegate { ShowPosition(); };
         }
 
-        protected override void OnNavigatedTo(NavigationEventArgs e)
+        protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
 
@@ -79,7 +90,31 @@ namespace LumigramPlus.App
             TrackPerformer.Text = request.Performer ?? "";
 
             StatusText.Text = "Opening...";
-            Player.Source = new Uri("ms-appdata:///local/media/" + request.CachedName);
+
+            if (!request.IsVoice)
+            {
+                Player.Source = new Uri("ms-appdata:///local/media/" + request.CachedName);
+                return;
+            }
+
+            // A voice message is read whole and decoded as it plays. It is a few
+            // kilobytes, so reading it all first costs nothing, and it lets a damaged
+            // file be reported here instead of as a player that never starts.
+            try
+            {
+                StorageFolder folder = await ApplicationData.Current.LocalFolder
+                    .GetFolderAsync(MediaCache.Folder);
+                StorageFile file = await folder.GetFileAsync(request.CachedName);
+
+                byte[] ogg = (await FileIO.ReadBufferAsync(file)).ToArray();
+
+                _voice = new VoiceFilePlayer(ogg);
+                Player.SetMediaStreamSource(_voice.Source);
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "This voice message cannot be played: " + ex.Message;
+            }
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
@@ -96,6 +131,12 @@ namespace LumigramPlus.App
             catch (Exception) { }
 
             Player.Source = null;
+
+            if (_voice != null)
+            {
+                _voice.Dispose();
+                _voice = null;
+            }
         }
 
         private void Player_Opened(object sender, RoutedEventArgs e)

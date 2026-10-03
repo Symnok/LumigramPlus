@@ -178,6 +178,12 @@
     <Compile Include="..\Core\Audio\OggOpus.cs">
       <Link>Core\Audio\OggOpus.cs</Link>
     </Compile>
+    <Compile Include="..\Core\Audio\OpusTimeline.cs">
+      <Link>Core\Audio\OpusTimeline.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Audio\OpusPlayback.cs">
+      <Link>Core\Audio\OpusPlayback.cs</Link>
+    </Compile>
     <Compile Include="..\Core\Audio\OggWriter.cs">
       <Link>Core\Audio\OggWriter.cs</Link>
     </Compile>

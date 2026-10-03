@@ -1152,8 +1152,11 @@ namespace LumigramPlus.App
                 // size at all, and this is a phone on a phone network.
                 // Audio says what a tap will do, which is more than loading: it
                 // downloads and then plays.
+                bool playable = m.Media.Kind == MediaKind.Audio ||
+                                m.Media.Kind == MediaKind.Voice;
+
                 item.MediaNote = m.Media.Describe() +
-                    (m.Media.Kind == MediaKind.Audio ? " - tap to play" : " - tap to load");
+                    (playable ? " - tap to play" : " - tap to load");
             }
 
             if (index < 0 || index > _messages.Count) _messages.Add(item);
@@ -1457,7 +1460,7 @@ namespace LumigramPlus.App
                     return;
                 }
 
-                if (item.Media.Kind == MediaKind.Audio)
+                if (item.Media.Kind == MediaKind.Audio || item.Media.Kind == MediaKind.Voice)
                 {
                     item.MediaNote = item.Media.Describe() + " - tap to play";
                     return;
@@ -1573,7 +1576,7 @@ namespace LumigramPlus.App
             if (item == null || item.Media == null) return;
 
             // Without this an MP3 fell through to the picture viewer below.
-            if (item.Media.Kind == MediaKind.Audio)
+            if (item.Media.Kind == MediaKind.Audio || item.Media.Kind == MediaKind.Voice)
             {
                 PlayAudio(item);
                 return;
@@ -2334,7 +2337,7 @@ namespace LumigramPlus.App
 
             // Audio has nothing to preview, so there is no accident to guard
             // against: one tap downloads it if need be, and then plays it.
-            if (item.Media.Kind == MediaKind.Audio)
+            if (item.Media.Kind == MediaKind.Audio || item.Media.Kind == MediaKind.Voice)
             {
                 PlayAudio(item);
                 return;
@@ -2410,6 +2413,20 @@ namespace LumigramPlus.App
                 if (file == null) return;
 
                 if (Frame == null || Frame.Content != this) return;
+            }
+
+            if (item.Media.Kind == MediaKind.Voice)
+            {
+                // Titled by who said it rather than by a file name, which a voice
+                // message does not have.
+                Frame.Navigate(typeof(AudioPage), new AudioRequest
+                {
+                    CachedName = file.Name,
+                    Title = "Voice message",
+                    Performer = Who(item.Out, item.SenderName),
+                    IsVoice = true,
+                });
+                return;
             }
 
             Frame.Navigate(typeof(AudioPage), new AudioRequest

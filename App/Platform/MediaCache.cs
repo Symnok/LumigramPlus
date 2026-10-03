@@ -197,7 +197,8 @@ namespace LumigramPlus.App
 
         private static async Task AdoptOldCopyAsync(StorageFolder folder, MediaInfo info)
         {
-            if (info.Kind != MediaKind.Audio) return;
+            // Voice messages too: they were ".bin" until they were given ".ogg".
+            if (info.Kind != MediaKind.Audio && info.Kind != MediaKind.Voice) return;
 
             string current = Name(info);
 
@@ -279,6 +280,11 @@ namespace LumigramPlus.App
                              : info.Kind == MediaKind.Video ? ".mp4"
                              : info.Kind == MediaKind.Audio
                                  ? (Media.PlayableExtension(info) ?? ".bin")
+                             // Named for what it is. Nothing here plays it by name,
+                             // but "save as" takes the extension from the cached
+                             // copy when a voice message has no name of its own -
+                             // which is always - and ".ogg" opens elsewhere.
+                             : info.Kind == MediaKind.Voice ? ".ogg"
                              : ".bin";
 
             return info.Id.ToString("x16") + extension;
