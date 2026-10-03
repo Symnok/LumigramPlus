@@ -385,10 +385,12 @@ namespace LumigramPlus.App
                 Notifications.Observe(page.Entries);
                 CallService.KeepOnline(client);
 
-                // The poll only ever sees the main list, so archived chats already
-                // loaded are kept rather than dropped for being absent from it.
+                // The poll only ever sees the first page, so everything else already
+                // loaded is kept rather than dropped for being absent from it - the
+                // archive, and every chat "load more" brought in. Keeping only the
+                // archive is what made load more undo itself ten seconds later.
                 foreach (DialogItem item in _all)
-                    if (item.Archived && !ordered.Contains(item)) ordered.Add(item);
+                    if (!ordered.Contains(item)) ordered.Add(item);
 
                 if (anyNew || !SameOrderInAll(ordered))
                 {
@@ -492,6 +494,11 @@ namespace LumigramPlus.App
             if (folderId == Folders.ArchiveFolderId && !_archiveLoaded) await LoadArchiveAsync();
 
             ApplyFolder();
+
+            // Asked for explicitly now. The list used to land at the top as a side
+            // effect of being emptied and refilled; it is reconciled in place now,
+            // which is right for a refresh and wrong for opening another folder.
+            if (_dialogs.Count > 0) DialogList.ScrollIntoView(_dialogs[0]);
         }
 
         private async Task LoadArchiveAsync()
@@ -531,13 +538,15 @@ namespace LumigramPlus.App
         {
             int now = Now();
 
-            _dialogs.Clear();
+            var wanted = new List<DialogItem>();
             foreach (DialogItem item in _all)
             {
                 if (!Shows(item, now)) continue;
                 if (!Matches(item)) continue;
-                _dialogs.Add(item);
+                wanted.Add(item);
             }
+
+            Reconcile(wanted);
 
             // Paging belongs to the main list. A folder shows what is loaded, and
             // the archive is fetched whole when it is opened.
@@ -564,7 +573,11 @@ namespace LumigramPlus.App
 
             try
             {
-                DialogItem last = _dialogs[_dialogs.Count - 1];
+                // The last of the main list as loaded, not as shown: with a search
+                // typed or a folder open, the last row on screen can be any chat,
+                // and paging from it skips or repeats whole pages.
+                DialogItem last = LastLoaded();
+                if (last == null) return;
 
                 MtprotoClient client = await TelegramService.ConnectAsync();
 
@@ -639,6 +652,15 @@ namespace LumigramPlus.App
 
             SearchBox.Visibility = Visibility.Visible;
             SearchBox.Focus(FocusState.Programmatic);
+        }
+
+        /// <summary>The last chat of the main list loaded so far, or null.</summary>
+        private DialogItem LastLoaded()
+        {
+            for (int i = _all.Count - 1; i >= 0; i--)
+                if (!_all[i].Archived) return _all[i];
+
+            return null;
         }
 
         private void Search_TextChanged(object sender, TextChangedEventArgs e)
@@ -984,6 +1006,32 @@ namespace LumigramPlus.App
                 if (item.PeerId == peerId) return item;
 
             return null;
+        }
+
+        /// <summary>
+        /// Brings the list on screen into line with <paramref name="wanted"/> by
+        /// moving, adding and removing rows - never by emptying it.
+        ///
+        /// Emptying and refilling the list is what threw the reader back to the top:
+        /// the list has nothing left to keep its place against. Moves and inserts
+        /// keep the rows that are on screen where they are, so a chat jumping to the
+        /// top because a message arrived, or a page arriving at the bottom, happens
+        /// without the view moving under the reader.
+        /// </summary>
+        private void Reconcile(List<DialogItem> wanted)
+        {
+            for (int i = _dialogs.Count - 1; i >= 0; i--)
+                if (!wanted.Contains(_dialogs[i])) _dialogs.RemoveAt(i);
+
+            for (int i = 0; i < wanted.Count; i++)
+            {
+                DialogItem item = wanted[i];
+                if (i < _dialogs.Count && ReferenceEquals(_dialogs[i], item)) continue;
+
+                int at = _dialogs.IndexOf(item);
+                if (at >= 0) _dialogs.Move(at, i);
+                else _dialogs.Insert(i, item);
+            }
         }
 
         private bool SameOrderInAll(List<DialogItem> ordered)

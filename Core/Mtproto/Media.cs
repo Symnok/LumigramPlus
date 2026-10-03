@@ -194,13 +194,22 @@ namespace Lumigram.Mtproto
         /// is partly from its name, and refuses an MP3 stored as ".bin" - which is
         /// what every document used to be stored as.
         ///
-        /// The mime type is asked first and the name second. A name is what a person
-        /// typed and a mime type is what an app decided, and when they disagree the
-        /// app is usually the one that looked at the bytes.
+        /// The name is asked first and the mime type second. The extension decides
+        /// the container the player expects, and the name is what the file was
+        /// called on the phone it came from - where the mime type is often only the
+        /// codec. The case that settled it: an M4A labelled "audio/aac", which as
+        /// ".aac" is refused because the player then expects a bare AAC stream
+        /// rather than the MP4 container the file really is.
         /// </summary>
         public static string PlayableExtension(MediaInfo info)
         {
             if (info == null) return null;
+
+            string name = (info.FileName ?? "").ToLowerInvariant();
+            string[] known = { ".mp3", ".m4a", ".aac", ".wma", ".wav" };
+
+            foreach (string extension in known)
+                if (name.EndsWith(extension)) return extension;
 
             string mime = (info.MimeType ?? "").ToLowerInvariant();
 
@@ -215,12 +224,6 @@ namespace Lumigram.Mtproto
                 return ".wma";
             if (mime == "audio/wav" || mime == "audio/x-wav" || mime == "audio/wave")
                 return ".wav";
-
-            string name = (info.FileName ?? "").ToLowerInvariant();
-            string[] known = { ".mp3", ".m4a", ".aac", ".wma", ".wav" };
-
-            foreach (string extension in known)
-                if (name.EndsWith(extension)) return extension;
 
             return null;
         }

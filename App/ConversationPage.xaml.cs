@@ -37,6 +37,20 @@ namespace LumigramPlus.App
         Read = 2,
     }
 
+    /// <summary>
+    /// One chat in the forward list.
+    ///
+    /// Its own class because the list binds to it, and binding on this platform
+    /// reads properties only. DialogEntry carries its title as a plain field, so the
+    /// list it used to be bound to drew every row empty: the chats were there and
+    /// tappable, with nothing on them to say which was which.
+    /// </summary>
+    public sealed class ForwardTarget
+    {
+        public string Title { get; set; }
+        public DialogEntry Entry { get; set; }
+    }
+
     /// <summary>One reaction as drawn on a bubble.</summary>
     public sealed class ReactionChip
     {
@@ -2237,7 +2251,11 @@ namespace LumigramPlus.App
                 Messages.DialogPage page = await Messages.GetDialogPageAsync(
                     client, 40, 0, 0, null, TelegramService.Info);
 
-                ForwardList.ItemsSource = page.Entries;
+                var targets = new List<ForwardTarget>();
+                foreach (DialogEntry d in page.Entries)
+                    targets.Add(new ForwardTarget { Title = d.Title, Entry = d });
+
+                ForwardList.ItemsSource = targets;
             }
             catch (Exception ex)
             {
@@ -2263,7 +2281,8 @@ namespace LumigramPlus.App
 
         private async void ForwardTarget_Click(object sender, ItemClickEventArgs e)
         {
-            var target = e.ClickedItem as DialogEntry;
+            var chosen = e.ClickedItem as ForwardTarget;
+            DialogEntry target = chosen == null ? null : chosen.Entry;
             MessageItem item = _forwarding;
 
             CloseForward();

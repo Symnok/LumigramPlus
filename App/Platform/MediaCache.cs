@@ -185,31 +185,53 @@ namespace LumigramPlus.App
         }
 
         /// <summary>
-        /// Renames an audio file downloaded before audio had a kind of its own.
+        /// Renames an audio file stored under a name an earlier version chose.
         ///
-        /// Those were stored as "id.bin", like every other document. The bytes are
-        /// exactly the MP3 they always were, so a rename is all it takes - and it
-        /// spares downloading the same track again just because its name changed.
+        /// Two of those: ".bin", from before audio had a kind of its own, and the
+        /// wrong one of two audio extensions - an M4A labelled "audio/aac" was stored
+        /// as ".aac" until the file's own name was made to decide. The bytes are the
+        /// same file either way, so a rename is all it takes, and it spares
+        /// downloading the same track again because its name changed.
         /// </summary>
+        private static readonly string[] OldExtensions = { ".bin", ".mp3", ".m4a", ".aac", ".wma", ".wav" };
+
         private static async Task AdoptOldCopyAsync(StorageFolder folder, MediaInfo info)
         {
             if (info.Kind != MediaKind.Audio) return;
 
             string current = Name(info);
-            string old = info.Id.ToString("x16") + ".bin";
-            if (current == old) return;
 
-            StorageFile file;
-            try { file = await folder.GetFileAsync(old); }
-            catch (Exception) { return; }      // nothing old to adopt
-
+            // Already where it should be: nothing to look for.
             try
             {
-                await file.RenameAsync(current, NameCollisionOption.ReplaceExisting);
+                await folder.GetFileAsync(current);
+                return;
             }
             catch (Exception)
             {
-                // Left as it is: the worst case is downloading the track again.
+            }
+
+            string stem = info.Id.ToString("x16");
+
+            foreach (string extension in OldExtensions)
+            {
+                string old = stem + extension;
+                if (old == current) continue;
+
+                StorageFile file;
+                try { file = await folder.GetFileAsync(old); }
+                catch (Exception) { continue; }      // not under this name
+
+                try
+                {
+                    await file.RenameAsync(current, NameCollisionOption.ReplaceExisting);
+                }
+                catch (Exception)
+                {
+                    // Left as it is: the worst case is downloading the track again.
+                }
+
+                return;
             }
         }
 

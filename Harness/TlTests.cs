@@ -520,6 +520,37 @@ namespace Lumigram.Harness
                     Eq("flac kind", MediaKind.Document, f.Kind);
                 }
 
+                // M4A, every way it turns up: the three mime types apps use for it,
+                // and a bare name. Each has to play, and be stored as ".m4a" - the
+                // player decides what a file is partly from that extension.
+                {
+                    string[] mimes = { "audio/mp4", "audio/m4a", "audio/x-m4a" };
+                    foreach (string mime in mimes)
+                    {
+                        MediaInfo m = Document(mime, "song.m4a", true, false,
+                                               "Title", "Artist", 200);
+                        Eq("m4a kind (" + mime + ")", MediaKind.Audio, m.Kind);
+                        Eq("m4a extension (" + mime + ")", ".m4a", Media.PlayableExtension(m));
+                    }
+
+                    MediaInfo named = Document("application/octet-stream", "Voice Memo.M4A",
+                                               false, false, null, null, 0);
+                    Eq("named m4a kind", MediaKind.Audio, named.Kind);
+                    Eq("named m4a extension", ".m4a", Media.PlayableExtension(named));
+                }
+
+                // A name and a mime type that disagree about the container. Apps
+                // often label an M4A "audio/aac", which is the codec inside it rather
+                // than the container; stored as ".aac" the player expects a bare AAC
+                // stream and refuses the file. The name is what the file was called
+                // on the phone it came from, so for the container it wins.
+                {
+                    MediaInfo m = Document("audio/aac", "song.m4a", true, false,
+                                           null, null, 200);
+                    Eq("aac-labelled m4a kind", MediaKind.Audio, m.Kind);
+                    Eq("aac-labelled m4a extension", ".m4a", Media.PlayableExtension(m));
+                }
+
                 // And an ordinary document is left alone.
                 {
                     MediaInfo m = Document("application/pdf", "report.pdf", false, false,
