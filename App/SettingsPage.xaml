@@ -4,29 +4,25 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
-    <Grid Margin="16,24,16,16">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
+    <!--
+      Two tabs, swiped between: the settings, and what this app is.
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock Text="LUMIGRAM+" FontSize="14" Opacity="0.6"/>
-            <TextBlock Text="settings" FontSize="30"/>
-        </StackPanel>
-
+      A Pivot because that is what a tab is on this platform - the same swipeable
+      headings as the phone's own settings and mail. Its title takes the place of
+      the "LUMIGRAM+" line the page used to draw for itself, and the tab headings
+      take the place of the page heading.
+    -->
+    <Pivot x:Name="Tabs" Title="LUMIGRAM+">
+        <PivotItem Header="settings">
         <!--
           The settings outgrew the screen the moment background notifications
-          arrived, and a StackPanel in a star row does not scroll - it is simply
-          given the height it asks for and the rest is off the bottom of the phone.
-
-          The margin moves onto the panel so the scrollbar sits against the edge of
-          the screen rather than sixteen pixels inside it.
+          arrived, and a StackPanel does not scroll on its own - it is simply given
+          the height it asks for and the rest is off the bottom of the phone.
         -->
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
                       VerticalScrollMode="Enabled" HorizontalScrollMode="Disabled"
                       HorizontalScrollBarVisibility="Disabled"
-                      Margin="0,0,-16,-16" Padding="0,0,16,16">
+                      Padding="0,0,0,16">
         <StackPanel>
             <TextBlock Text="Text size" Margin="0,0,0,4"/>
             <ComboBox x:Name="TextSizeBox" HorizontalAlignment="Stretch"
@@ -116,5 +112,38 @@
             <Button Content="exit" Click="Exit_Click" HorizontalAlignment="Stretch"/>
         </StackPanel>
         </ScrollViewer>
-    </Grid>
+        </PivotItem>
+
+        <PivotItem Header="about">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollMode="Disabled" Padding="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="Lumigram+" FontSize="34"/>
+
+                    <!-- Read from the installed package rather than written here, so
+                         it cannot fall out of step with the build: this is the
+                         number to quote when something goes wrong. -->
+                    <TextBlock x:Name="VersionText" FontSize="22" Opacity="0.85"
+                               Margin="0,2,0,0"/>
+
+                    <TextBlock Text="Telegram client for Windows Phone 8.1"
+                               TextWrapping="Wrap" FontSize="16" Margin="0,16,0,0"/>
+
+                    <TextBlock Text="Talks to Telegram's servers directly over MTProto 2.0. There is no server of ours in between, and the sign-in key is made on this phone and never leaves it."
+                               TextWrapping="Wrap" Opacity="0.7" FontSize="14"
+                               Margin="0,8,0,0"/>
+
+                    <TextBlock x:Name="LayerText" Opacity="0.55" FontSize="13"
+                               Margin="0,16,0,0"/>
+
+                    <HyperlinkButton Content="github.com/Symnok/LumigramPlus"
+                                     NavigateUri="https://github.com/Symnok/LumigramPlus"
+                                     Margin="-12,12,0,0" FontSize="15"/>
+
+                    <TextBlock Text="MIT License, &#169; 2026 Symnok"
+                               Opacity="0.55" FontSize="13" Margin="0,4,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </PivotItem>
+    </Pivot>
 </Page>

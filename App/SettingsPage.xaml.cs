@@ -22,6 +22,36 @@ namespace LumigramPlus.App
         public SettingsPage()
         {
             InitializeComponent();
+            ShowAbout();
+        }
+
+        /// <summary>
+        /// Fills in the about tab.
+        ///
+        /// The version comes from the installed package's own identity - the number
+        /// in Package.appxmanifest that is bumped for every build - so what is shown
+        /// is what is installed, not what someone remembered to type.
+        ///
+        /// The API layer is there for the same reason a version is: it is the first
+        /// thing worth knowing when Telegram changes something and a feature stops
+        /// working.
+        /// </summary>
+        private void ShowAbout()
+        {
+            try
+            {
+                Windows.ApplicationModel.PackageVersion v =
+                    Windows.ApplicationModel.Package.Current.Id.Version;
+
+                VersionText.Text = "version " + v.Major + "." + v.Minor + "." +
+                                   v.Build + "." + v.Revision;
+            }
+            catch (Exception)
+            {
+                VersionText.Text = "";
+            }
+
+            LayerText.Text = "Telegram API layer " + Lumigram.Tl.TlConstructors.Layer;
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
