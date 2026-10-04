@@ -20,6 +20,47 @@ namespace Lumigram.Harness
             string host = args.Length > 1 ? args[1] : TelegramServers.TestDc2Host;
             int port = args.Length > 2 ? int.Parse(args[2]) : TelegramServers.DefaultPort;
 
+            return Run(host, port, null);
+        }
+
+        /// <summary>
+        /// The same handshake through a SOCKS5 proxy:
+        /// socks proxyhost:port [user password] [datacenter-ip]
+        ///
+        /// A full DH exchange is the strongest test a proxy can be given without an
+        /// account: several round trips, and a packet MTProto rejects outright if a
+        /// single byte of the tunnel is off.
+        /// </summary>
+        public static int RunThroughProxy(string[] args)
+        {
+            if (args.Length < 2 || args[1].IndexOf(':') < 0)
+            {
+                Console.WriteLine("usage: socks <proxyhost:port> [user password] [datacenter-ip]");
+                return 2;
+            }
+
+            string[] hostPort = args[1].Split(':');
+            var proxy = new ProxySettings { Host = hostPort[0], Port = int.Parse(hostPort[1]) };
+
+            int next = 2;
+            if (args.Length >= 4)
+            {
+                proxy.User = args[2];
+                proxy.Password = args[3];
+                next = 4;
+            }
+
+            string host = args.Length > next ? args[next] : TelegramServers.ProductionDc2Host;
+
+            Console.WriteLine("through SOCKS5 proxy {0}:{1}{2}", proxy.Host, proxy.Port,
+                              proxy.HasLogin ? " as " + proxy.User : "");
+
+            return Run(host, TelegramServers.DefaultPort, proxy);
+        }
+
+        private static int Run(string host, int port, ProxySettings proxy)
+        {
+
             Console.WriteLine("MTProto 2.0 auth key handshake");
             Console.WriteLine("  target: {0}:{1}{2}", host, port,
                               host == TelegramServers.TestDc2Host ? "  (test datacenter)" : "");
@@ -27,7 +68,7 @@ namespace Lumigram.Harness
 
             try
             {
-                return RunAsync(host, port).GetAwaiter().GetResult();
+                return RunAsync(host, port, proxy).GetAwaiter().GetResult();
             }
             catch (AggregateException ex)
             {
@@ -43,12 +84,15 @@ namespace Lumigram.Harness
             }
         }
 
-        private static async Task<int> RunAsync(string host, int port)
+        private static async Task<int> RunAsync(string host, int port, ProxySettings proxy)
         {
             var crypto = new DesktopCrypto();
             var sw = Stopwatch.StartNew();
 
-            using (var transport = new TcpTransport())
+            ITransport socket = new TcpTransport();
+            if (proxy != null) socket = new Socks5Transport(socket, proxy);
+
+            using (var transport = socket)
             {
                 Console.WriteLine("connecting...");
                 await transport.ConnectAsync(host, port);

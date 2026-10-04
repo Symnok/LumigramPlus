@@ -204,6 +204,27 @@ five-second poll is held off, or it would staple the newest messages onto the en
 of a window from the middle of the conversation with everything between missing.
 "skip to end" is how the reader leaves that state.
 
+## SOCKS5 proxy
+
+For networks that block Telegram. `Socks5Transport` (Core) wraps any
+`ITransport`: it connects to the proxy, runs the RFC 1928 handshake (with RFC 1929
+username/password login), and then passes bytes straight through, so MTProto never
+knows. Ported from Symbigram's hand-written handshake.
+
+Because it is a wrapper in Core, the phone's socket and the desktop harness's both
+go inside it unchanged - the harness tests the code the phone runs. Verified against
+a local logging proxy with a full auth-key exchange against a production datacenter
+(`Lumigram.Harness socks 127.0.0.1:PORT [user pass]`).
+
+Every connection on the phone is made through `PhoneTransport.Open()`, which applies
+the setting: the main connection, the per-datacenter file connections and the
+background task's. None can go around the proxy - on a blocking network one that did
+would fail, and on a watching one it would show the user's real address.
+
+The proxy page is reachable from the sign-in screen as well as Settings, because on a
+blocking network there is no signing in without it. Calls are not proxied: they are
+UDP, which this kind of SOCKS5 setup does not carry.
+
 ## State
 
 Done, and verified against live Telegram:

@@ -56,4 +56,15 @@
             <TextBlock x:Name="LogText" TextWrapping="Wrap" FontSize="12" Opacity="0.5"/>
         </ScrollViewer>
     </Grid>
+
+    <!--
+      The proxy, from here as well as from the settings. On a network that blocks
+      Telegram nothing on this page can connect without one - and the settings
+      cannot be reached until after signing in, which is exactly what is failing.
+    -->
+    <Page.BottomAppBar>
+        <CommandBar>
+            <AppBarButton Icon="World" Label="proxy" Click="Proxy_Click"/>
+        </CommandBar>
+    </Page.BottomAppBar>
 </Page>

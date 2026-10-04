@@ -41,8 +41,11 @@ namespace Lumigram.Harness
                     Console.WriteLine();
                     Console.WriteLine("== jitter buffer ==");
                     bool jitter = JitterTests.RunAll();
+                    Console.WriteLine();
+                    Console.WriteLine("== socks5 ==");
+                    bool socks = Socks5Tests.RunAll();
 
-                    bool all = bigint && crypto && tl && links && calls && voip && jitter;
+                    bool all = bigint && crypto && tl && links && calls && voip && jitter && socks;
                     Console.WriteLine();
                     Console.WriteLine(all ? "ALL PASS" : "FAILURES PRESENT");
                     return all ? 0 : 1;
@@ -58,6 +61,12 @@ namespace Lumigram.Harness
 
                 case "handshake":
                     return HandshakeCommand.Run(args);
+
+                case "socks5":
+                    return Socks5Tests.RunAll() ? 0 : 1;
+
+                case "socks":
+                    return HandshakeCommand.RunThroughProxy(args);
 
                 case "nearestdc":
                     return ApiCommand.RunNearestDc(args);

@@ -25,7 +25,7 @@ namespace LumigramPlus.App
 
         private static readonly object Gate = new object();
         private static MtprotoClient _client;
-        private static PhoneTransport _transport;
+        private static ITransport _transport;
 
         public static SessionStore Session;
 
@@ -96,7 +96,7 @@ namespace LumigramPlus.App
 
             if (Session == null) Session = await SessionStore.LoadAsync();
 
-            var transport = new PhoneTransport();
+            ITransport transport = PhoneTransport.Open();
             var client = new MtprotoClient(Crypto, transport, delegate { });
             client.Info = Info;
 
@@ -143,7 +143,7 @@ namespace LumigramPlus.App
 
             string host = TelegramServers.HostFor(dcId);
 
-            var transport = new PhoneTransport();
+            ITransport transport = PhoneTransport.Open();
             var client = new MtprotoClient(Crypto, transport, delegate { });
             client.Info = Info;
 

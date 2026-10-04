@@ -1,5 +1,6 @@
 using System;
-using Windows.Storage;
+using Windows.Storage;
+using Lumigram.Mtproto;
 
 namespace LumigramPlus.App
 {
@@ -56,6 +57,11 @@ namespace LumigramPlus.App
         private const string NotificationSoundKey = "notificationSound";
         private const string BackgroundKey = "backgroundMode";
         private const string TextSizeKey = "textSize";
+        private const string ProxyEnabledKey = "proxyEnabled";
+        private const string ProxyHostKey = "proxyHost";
+        private const string ProxyPortKey = "proxyPort";
+        private const string ProxyUserKey = "proxyUser";
+        private const string ProxyPasswordKey = "proxyPassword";
 
         /// <summary>
         /// Whether pictures are fetched as soon as they appear.
@@ -170,6 +176,95 @@ namespace LumigramPlus.App
             {
                 try { ApplicationData.Current.LocalSettings.Values[TextSizeKey] = (int)value; }
                 catch (Exception) { }
+            }
+        }
+
+        /// <summary>
+        /// The SOCKS5 proxy to connect through, or null to connect directly.
+        ///
+        /// Null as well when it is switched on but incomplete - no host, or no
+        /// usable port. Connecting directly then is the only thing that can work,
+        /// and the proxy page says why it is not being used.
+        ///
+        /// Read by the background task as well as the app, which is why it lives
+        /// here: a message check that went around the proxy would fail on exactly
+        /// the networks the proxy is for, and quietly show the user's real address
+        /// to Telegram while doing it.
+        ///
+        /// The password is kept in the app's private settings, with the same
+        /// protection as the sign-in key the app already keeps in its private
+        /// storage. Encrypting the lesser secret while the greater one is not would
+        /// be theatre.
+        /// </summary>
+        public static ProxySettings Proxy
+        {
+            get
+            {
+                if (!ProxyEnabled) return null;
+
+                var proxy = new ProxySettings
+                {
+                    Host = ReadString(ProxyHostKey),
+                    Port = ProxyPort,
+                    User = ReadString(ProxyUserKey),
+                    Password = ReadString(ProxyPasswordKey),
+                };
+
+                return proxy.IsUsable ? proxy : null;
+            }
+        }
+
+        public static bool ProxyEnabled
+        {
+            get { return Read(ProxyEnabledKey, false); }
+            set { Write(ProxyEnabledKey, value); }
+        }
+
+        public static string ProxyHost { get { return ReadString(ProxyHostKey); } }
+        public static string ProxyUser { get { return ReadString(ProxyUserKey); } }
+        public static string ProxyPassword { get { return ReadString(ProxyPasswordKey); } }
+
+        public static int ProxyPort
+        {
+            get
+            {
+                try
+                {
+                    object stored = ApplicationData.Current.LocalSettings.Values[ProxyPortKey];
+                    return stored is int ? (int)stored : 1080;
+                }
+                catch (Exception)
+                {
+                    return 1080;
+                }
+            }
+        }
+
+        /// <summary>Stores the proxy's address and login, without switching it on or off.</summary>
+        public static void SetProxy(string host, int port, string user, string password)
+        {
+            try
+            {
+                var values = ApplicationData.Current.LocalSettings.Values;
+                values[ProxyHostKey] = host ?? "";
+                values[ProxyPortKey] = port;
+                values[ProxyUserKey] = user ?? "";
+                values[ProxyPasswordKey] = password ?? "";
+            }
+            catch (Exception)
+            {
+            }
+        }
+
+        private static string ReadString(string key)
+        {
+            try
+            {
+                return ApplicationData.Current.LocalSettings.Values[key] as string ?? "";
+            }
+            catch (Exception)
+            {
+                return "";
             }
         }
 

@@ -89,6 +89,11 @@
             <TextBlock Text="The reactions on offer, numbered. If any shows as an empty box, or the heart is black, say its number and it will be taken out."
                        TextWrapping="Wrap" Opacity="0.55" FontSize="12" Margin="0,4,0,0"/>
 
+            <TextBlock Text="SOCKS5 proxy" Margin="0,28,0,4"/>
+            <TextBlock x:Name="ProxyText" TextWrapping="Wrap" Opacity="0.7" FontSize="13"/>
+            <Button Content="proxy settings" HorizontalAlignment="Stretch"
+                    Margin="0,8,0,0" Click="Proxy_Click"/>
+
             <TextBlock Text="Downloaded files" Margin="0,28,0,4"/>
             <TextBlock x:Name="CacheText" Text="" TextWrapping="Wrap" Opacity="0.7"
                        FontSize="13"/>

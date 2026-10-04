@@ -146,6 +146,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="ProxyPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="SettingsPage.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -186,6 +190,9 @@
     </Compile>
     <Compile Include="AudioPage.xaml.cs">
       <DependentUpon>AudioPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="ProxyPage.xaml.cs">
+      <DependentUpon>ProxyPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="SettingsPage.xaml.cs">
       <DependentUpon>SettingsPage.xaml</DependentUpon>

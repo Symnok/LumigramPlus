@@ -4,6 +4,7 @@ using Windows.Networking;
 using Windows.Networking.Sockets;
 using Windows.Storage.Streams;
 using Lumigram.Mtproto;
+using LumigramPlus.App;
 
 namespace Lumigram.Phone
 {
@@ -16,6 +17,23 @@ namespace Lumigram.Phone
     /// </summary>
     internal sealed class PhoneTransport : ITransport
     {
+        /// <summary>
+        /// A connection to a datacenter: straight there, or through the SOCKS5
+        /// proxy when the user has set one.
+        ///
+        /// Every connection is made through here - the main one, the extra ones
+        /// files are fetched over, and the background task's - so none can go
+        /// around the proxy. On a network that blocks Telegram one that did would
+        /// simply fail; on one that watches, it would show the user's real address.
+        /// </summary>
+        public static ITransport Open()
+        {
+            ITransport socket = new PhoneTransport();
+
+            ProxySettings proxy = AppSettings.Proxy;
+            return proxy == null ? socket : new Socks5Transport(socket, proxy);
+        }
+
         private StreamSocket _socket;
         private DataReader _reader;
         private DataWriter _writer;

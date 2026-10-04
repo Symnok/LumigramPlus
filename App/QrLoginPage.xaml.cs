@@ -72,6 +72,15 @@ namespace LumigramPlus.App
             _leaving = true;
         }
 
+        /// <summary>
+        /// Opens the proxy page. Coming back builds this page afresh, and its first
+        /// act is to connect - so whatever was set there is what is tried next.
+        /// </summary>
+        private void Proxy_Click(object sender, RoutedEventArgs e)
+        {
+            Frame.Navigate(typeof(ProxyPage));
+        }
+
         private async void Start()
         {
             try

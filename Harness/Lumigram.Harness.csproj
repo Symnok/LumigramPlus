@@ -63,6 +63,7 @@
     <Compile Include="VoipTests.cs" />
     <Compile Include="JitterTests.cs" />
     <Compile Include="LinkTests.cs" />
+    <Compile Include="Socks5Tests.cs" />
     <Compile Include="DesktopCrypto.cs" />
     <Compile Include="TcpTransport.cs" />
     <Compile Include="HandshakeCommand.cs" />
@@ -207,6 +208,9 @@
     </Compile>
     <Compile Include="..\Core\Mtproto\CrossDc.cs">
       <Link>Core\Mtproto\CrossDc.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\Socks5Transport.cs">
+      <Link>Core\Mtproto\Socks5Transport.cs</Link>
     </Compile>
     <Compile Include="..\Core\Mtproto\Topics.cs">
       <Link>Core\Mtproto\Topics.cs</Link>

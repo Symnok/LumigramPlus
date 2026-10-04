@@ -90,6 +90,29 @@ namespace LumigramPlus.App
 
             ShowCacheSize();
             ShowReactionTest();
+            ShowProxy();
+        }
+
+        /// <summary>
+        /// Says whether connections go through a proxy, and which. Shown on the way
+        /// back from the proxy page too, since that is where it changes.
+        /// </summary>
+        private void ShowProxy()
+        {
+            ProxySettings proxy = AppSettings.Proxy;
+
+            if (proxy != null)
+                ProxyText.Text = "On - connecting through " + proxy.Host + ":" + proxy.Port +
+                                 (proxy.HasLogin ? " as " + proxy.User : "") + ".";
+            else if (AppSettings.ProxyEnabled)
+                ProxyText.Text = "Switched on but incomplete, so connecting directly.";
+            else
+                ProxyText.Text = "Off - connecting directly.";
+        }
+
+        private void Proxy_Click(object sender, RoutedEventArgs e)
+        {
+            Frame.Navigate(typeof(ProxyPage));
         }
 
         /// <summary>
