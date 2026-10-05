@@ -63,6 +63,9 @@ namespace LumigramPlus.App
             // stored values are in the order the sizes were added, which stopped
             // being the same thing when extra small and extra large arrived.
             TextSizeBox.SelectedIndex = TextSizes.IndexOf(AppSettings.TextSize);
+            EnterKeyBox.SelectedIndex = (int)AppSettings.EnterKey;
+            BenchmarkSwitch.IsOn = AppSettings.ShowBenchmark;
+            ShowBenchmark(AppSettings.ShowBenchmark);
             AutoLoadSwitch.IsOn = AppSettings.AutoLoadPhotos;
             NotificationsSwitch.IsOn = AppSettings.Notifications;
             SoundSwitch.IsOn = AppSettings.NotificationSound;
@@ -89,7 +92,6 @@ namespace LumigramPlus.App
                 : "Not signed in.";
 
             ShowCacheSize();
-            ShowReactionTest();
             ShowProxy();
         }
 
@@ -113,36 +115,6 @@ namespace LumigramPlus.App
         private void Proxy_Click(object sender, RoutedEventArgs e)
         {
             Frame.Navigate(typeof(ProxyPage));
-        }
-
-        /// <summary>
-        /// Draws every reaction the picker offers, each with its number, exactly as
-        /// a message would draw it - including the heart's red.
-        /// </summary>
-        private void ShowReactionTest()
-        {
-            ReactionTestText.Inlines.Clear();
-
-            var numberBrush = new Windows.UI.Xaml.Media.SolidColorBrush(
-                Windows.UI.Color.FromArgb(160, 160, 160, 160));
-
-            for (int i = 0; i < ReactionSet.Old.Length; i++)
-            {
-                string emoji = ReactionSet.Old[i];
-
-                ReactionTestText.Inlines.Add(new Windows.UI.Xaml.Documents.Run
-                {
-                    Text = (i + 1) + "\u00A0",
-                    FontSize = 12,
-                    Foreground = numberBrush,
-                });
-
-                ReactionTestText.Inlines.Add(new Windows.UI.Xaml.Documents.Run
-                {
-                    Text = ReactionSet.Display(emoji) + "  ",
-                    Foreground = ReactionSet.BrushFor(emoji),
-                });
-            }
         }
 
         /// <summary>
@@ -369,6 +341,35 @@ namespace LumigramPlus.App
         /// on a desktop - where the answer is yes for any phone and therefore
         /// worthless. The only machine whose answer matters is this one.
         /// </summary>
+        private void EnterKey_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loading) return;
+
+            int index = EnterKeyBox.SelectedIndex;
+            if (index < 0) return;
+
+            AppSettings.EnterKey = (EnterKey)index;
+        }
+
+        private void Benchmark_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+
+            AppSettings.ShowBenchmark = BenchmarkSwitch.IsOn;
+            ShowBenchmark(BenchmarkSwitch.IsOn);
+        }
+
+        /// <summary>
+        /// Shows or hides the benchmark. Its last result goes with it, so switching
+        /// it off leaves no stray measurements in the settings.
+        /// </summary>
+        private void ShowBenchmark(bool shown)
+        {
+            Visibility v = shown ? Visibility.Visible : Visibility.Collapsed;
+            BenchmarkButton.Visibility = v;
+            BenchmarkText.Visibility = v;
+        }
+
         private async void Benchmark_Click(object sender, RoutedEventArgs e)
         {
             BenchmarkButton.IsEnabled = false;

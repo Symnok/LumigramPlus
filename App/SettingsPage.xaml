@@ -36,6 +36,15 @@
             <TextBlock Text="Applies to messages and the chat list. Small is the size the app used before this setting existed. Each screen picks up a change the next time it is opened."
                        TextWrapping="Wrap" Opacity="0.7" FontSize="13" Margin="0,4,0,0"/>
 
+            <TextBlock Text="Enter key" Margin="0,20,0,4"/>
+            <ComboBox x:Name="EnterKeyBox" HorizontalAlignment="Stretch"
+                      SelectionChanged="EnterKey_Changed">
+                <ComboBoxItem Content="new line"/>
+                <ComboBoxItem Content="send message"/>
+            </ComboBox>
+            <TextBlock Text="With new line, messages are sent with the send button. Applies the next time a chat is opened."
+                       TextWrapping="Wrap" Opacity="0.7" FontSize="13" Margin="0,4,0,0"/>
+
             <ToggleSwitch x:Name="AutoLoadSwitch" Header="Download photos automatically"
                           Margin="0,20,0,0"
                           OnContent="on" OffContent="off"
@@ -68,26 +77,23 @@
             <TextBlock x:Name="LastRunText" Text="" TextWrapping="Wrap" Opacity="0.7"
                        FontSize="13" Margin="0,4,0,0"/>
 
-            <Button x:Name="BenchmarkButton" Content="voice codec benchmark"
-                    HorizontalAlignment="Stretch" Margin="0,20,0,0"
-                    Click="Benchmark_Click"/>
+            <!-- Off by default: a measurement for working on calls. The switch
+                 only shows or hides it; nothing runs until the button is pressed. -->
+            <ToggleSwitch x:Name="BenchmarkSwitch" Header="Voice codec benchmark"
+                          OnContent="on" OffContent="off"
+                          Toggled="Benchmark_Toggled" Margin="0,16,0,0"/>
+            <Button x:Name="BenchmarkButton" Content="run voice codec benchmark"
+                    HorizontalAlignment="Stretch" Margin="0,4,0,0"
+                    Visibility="Collapsed" Click="Benchmark_Click"/>
             <TextBlock x:Name="BenchmarkText" Text="" TextWrapping="Wrap" Opacity="0.7"
-                       FontSize="12" FontFamily="Consolas" Margin="0,4,0,0"/>
+                       FontSize="12" FontFamily="Consolas" Margin="0,4,0,0"
+                       Visibility="Collapsed"/>
 
             <TextBlock x:Name="CallText" Text="" TextWrapping="Wrap" Opacity="0.7"
                        FontSize="12" FontFamily="Consolas" Margin="0,20,0,0"/>
 
             <TextBlock x:Name="ToastText" Text="" TextWrapping="Wrap" Opacity="0.7"
                        FontSize="13" Margin="0,4,0,0"/>
-
-            <!-- Whether this phone's emoji font can draw every reaction on offer.
-                 Checked here rather than assumed, because the font is older than
-                 most of Telegram's reactions and there is no way to ask it. -->
-            <TextBlock Text="Reaction test" Margin="0,28,0,4"/>
-            <TextBlock x:Name="ReactionTestText" TextWrapping="Wrap"
-                       IsColorFontEnabled="True" FontSize="26"/>
-            <TextBlock Text="The reactions on offer, numbered. If any shows as an empty box, or the heart is black, say its number and it will be taken out."
-                       TextWrapping="Wrap" Opacity="0.55" FontSize="12" Margin="0,4,0,0"/>
 
             <TextBlock Text="SOCKS5 proxy" Margin="0,28,0,4"/>
             <TextBlock x:Name="ProxyText" TextWrapping="Wrap" Opacity="0.7" FontSize="13"/>

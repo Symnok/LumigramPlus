@@ -1,5 +1,6 @@
 using System;
-using Windows.Storage;
+using Windows.Storage;
+
 using Lumigram.Mtproto;
 
 namespace LumigramPlus.App
@@ -39,6 +40,16 @@ namespace LumigramPlus.App
         ExtraLarge = 4,
     }
 
+    /// <summary>What the Enter key does in the message box.</summary>
+    internal enum EnterKey
+    {
+        /// <summary>Starts a new line; the send button sends. The default.</summary>
+        NewLine = 0,
+
+        /// <summary>Sends the message, as the app always did before this choice.</summary>
+        Send = 1,
+    }
+
     /// <summary>
     /// What the user has chosen.
     ///
@@ -57,6 +68,8 @@ namespace LumigramPlus.App
         private const string NotificationSoundKey = "notificationSound";
         private const string BackgroundKey = "backgroundMode";
         private const string TextSizeKey = "textSize";
+        private const string ShowBenchmarkKey = "showBenchmark";
+        private const string EnterKeyKey = "enterKey";
         private const string ProxyEnabledKey = "proxyEnabled";
         private const string ProxyHostKey = "proxyHost";
         private const string ProxyPortKey = "proxyPort";
@@ -175,6 +188,49 @@ namespace LumigramPlus.App
             set
             {
                 try { ApplicationData.Current.LocalSettings.Values[TextSizeKey] = (int)value; }
+                catch (Exception) { }
+            }
+        }
+
+        /// <summary>
+        /// Whether the voice codec benchmark is shown in the settings.
+        ///
+        /// Off by default. It is a measurement for working on calls, not something
+        /// anyone using the app needs - but it is kept rather than deleted, because
+        /// when a call breaks up on a slow phone it is the first thing worth running.
+        /// </summary>
+        public static bool ShowBenchmark
+        {
+            get { return Read(ShowBenchmarkKey, false); }
+            set { Write(ShowBenchmarkKey, value); }
+        }
+
+        /// <summary>
+        /// What Enter does in the message box. A new line by default: a message
+        /// box where Enter sends is one where a second line cannot be typed at all,
+        /// and a message sent by accident cannot be unsent.
+        /// </summary>
+        public static EnterKey EnterKey
+        {
+            get
+            {
+                try
+                {
+                    object stored = ApplicationData.Current.LocalSettings.Values[EnterKeyKey];
+                    if (!(stored is int)) return EnterKey.NewLine;
+
+                    int value = (int)stored;
+                    return Enum.IsDefined(typeof(EnterKey), value) ? (EnterKey)value
+                                                                    : EnterKey.NewLine;
+                }
+                catch (Exception)
+                {
+                    return EnterKey.NewLine;
+                }
+            }
+            set
+            {
+                try { ApplicationData.Current.LocalSettings.Values[EnterKeyKey] = (int)value; }
                 catch (Exception) { }
             }
         }

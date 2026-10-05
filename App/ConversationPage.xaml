@@ -385,8 +385,11 @@
                 </Grid>
             </Border>
 
+            <!-- Single-line or growing, depending on what Enter does - set in
+                 code from the setting, see ApplyEnterKey. -->
             <TextBox x:Name="ComposeBox" TextWrapping="NoWrap" Margin="0,8,0,0"
                      FontSize="{StaticResource AppBodyFontSize}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
                      KeyDown="Compose_KeyDown" PlaceholderText="message"/>
         </StackPanel>
         <!--

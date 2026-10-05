@@ -797,6 +797,8 @@ namespace LumigramPlus.App
             _canLink = _peer.Kind == "channel";
             _readOutbox = _peer.ReadOutboxMaxId;
 
+            ApplyEnterKey();
+
             // Messages arriving for the chat on screen must not announce themselves.
             Notifications.OpenPeerId = _peer.PeerId;
             Notifications.Banner -= OnBanner;
@@ -2467,9 +2469,34 @@ namespace LumigramPlus.App
             return "user " + m.FromId;
         }
 
+        /// <summary>What Enter does here, read from the setting as the chat opens.</summary>
+        private EnterKey _enterKey;
+
+        /// <summary>
+        /// Sets the message box up for what Enter does.
+        ///
+        /// For new lines the box accepts returns and wraps, growing to about five
+        /// lines before it scrolls - beyond that it would push the conversation off
+        /// the screen it is answering. For sending, it is the single line it always
+        /// was, and Enter is caught before it can become a line break.
+        /// </summary>
+        private void ApplyEnterKey()
+        {
+            _enterKey = AppSettings.EnterKey;
+
+            bool lines = _enterKey == EnterKey.NewLine;
+
+            ComposeBox.AcceptsReturn = lines;
+            ComposeBox.TextWrapping = lines ? TextWrapping.Wrap : TextWrapping.NoWrap;
+            ComposeBox.MaxHeight = lines ? ComposeBox.FontSize * 7.5 : double.PositiveInfinity;
+        }
+
         private void Compose_KeyDown(object sender, Windows.UI.Xaml.Input.KeyRoutedEventArgs e)
         {
             if (e.Key != Windows.System.VirtualKey.Enter) return;
+
+            // A new line: left to the box, which accepts returns in this mode.
+            if (_enterKey == EnterKey.NewLine) return;
 
             e.Handled = true;
             Send();
