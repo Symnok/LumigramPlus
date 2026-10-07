@@ -1026,6 +1026,11 @@ namespace LumigramPlus.App
 
                 bool added = false;
 
+                // Measured before anything is added: the new rows make the list
+                // taller, and afterwards nobody is at the bottom any more.
+                bool following = AtBottom();
+                var arrived = new List<TextMessage>();
+
                 for (int i = history.Messages.Count - 1; i >= 0; i--)
                 {
                     TextMessage m = history.Messages[i];
@@ -1042,12 +1047,30 @@ namespace LumigramPlus.App
 
                     Add(m);
                     added = true;
+                    arrived.Add(m);
                 }
 
                 if (added)
                 {
-                    ScrollToEnd();
-                    MarkRead(client, history.Messages);
+                    if (following)
+                    {
+                        // Already at the end, watching the conversation: keep up
+                        // with it, as before.
+                        ScrollToEnd();
+                        MarkRead(client, history.Messages);
+                    }
+                    else
+                    {
+                        // Reading further up. The new messages go on the end and the
+                        // view stays where it is - and they are not marked read,
+                        // because they have not been. They are, once the reader
+                        // scrolls down to them; see Scroller_ViewChanged.
+                        foreach (TextMessage m in arrived)
+                            if (!m.Out) _unseen.Add(m);
+
+                        ShowUnseen();
+                    }
+
                     FetchMissingReplies();
                 }
             }
@@ -3318,6 +3341,107 @@ namespace LumigramPlus.App
 
                 item.Ticks = MessageTicks.Read;
             }
+        }
+
+        // ---- following the conversation ---------------------------------------
+
+        /// <summary>
+        /// How close to the end counts as being at it, in pixels. A little slack, so
+        /// a reader a few pixels short of the very bottom - which is where a fling
+        /// usually stops - is still treated as following.
+        /// </summary>
+        private const double FollowSlack = 48;
+
+        /// <summary>The list's own scroll viewer, found once the list has one.</summary>
+        private ScrollViewer _scroller;
+
+        /// <summary>
+        /// Messages from others that arrived while the reader was further up:
+        /// neither scrolled to nor marked read until the reader reaches the end.
+        /// </summary>
+        private readonly List<TextMessage> _unseen = new List<TextMessage>();
+
+        /// <summary>
+        /// Whether the reader is at the end of the conversation.
+        ///
+        /// True when there is nothing to scroll, and true before the list exists:
+        /// in both cases there is nowhere else for the reader to be.
+        /// </summary>
+        private bool AtBottom()
+        {
+            ScrollViewer scroller = Scroller();
+            if (scroller == null) return true;
+
+            return scroller.VerticalOffset >= scroller.ScrollableHeight - FollowSlack;
+        }
+
+        private ScrollViewer Scroller()
+        {
+            if (_scroller != null) return _scroller;
+
+            _scroller = FindFirst<ScrollViewer>(MessageList);
+            if (_scroller != null) _scroller.ViewChanged += Scroller_ViewChanged;
+
+            return _scroller;
+        }
+
+        /// <summary>
+        /// The reader scrolled. If that brought them to the end, the messages that
+        /// were waiting there have now been seen.
+        ///
+        /// This is the one place unseen messages become read, so it covers every way
+        /// of getting there: a scroll, "skip to end", or sending a message.
+        /// </summary>
+        private void Scroller_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+        {
+            if (_unseen.Count == 0 || !AtBottom()) return;
+
+            var seen = new List<TextMessage>(_unseen);
+            _unseen.Clear();
+            SetBusy(false, "");
+
+            MarkSeen(seen);
+        }
+
+        private async void MarkSeen(List<TextMessage> seen)
+        {
+            try
+            {
+                MtprotoClient client = await TelegramService.ConnectAsync();
+                MarkRead(client, seen);
+            }
+            catch (Exception)
+            {
+                // They stay unread on the server, which is the safe side to be
+                // wrong on: the chat list keeps its badge until the next read.
+            }
+        }
+
+        /// <summary>Says that there is more below, without moving anything.</summary>
+        private void ShowUnseen()
+        {
+            int n = _unseen.Count;
+            if (n == 0) return;
+
+            SetBusy(false, n == 1 ? "1 new message below" : n + " new messages below");
+        }
+
+        private static T FindFirst<T>(DependencyObject parent) where T : DependencyObject
+        {
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+
+                var match = child as T;
+                if (match != null) return match;
+
+                T deeper = FindFirst<T>(child);
+                if (deeper != null) return deeper;
+            }
+
+            return null;
         }
 
         private void ScrollToEnd()
