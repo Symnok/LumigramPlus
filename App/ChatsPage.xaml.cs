@@ -430,6 +430,11 @@ namespace LumigramPlus.App
             Frame.Navigate(typeof(FindPage));
         }
 
+        private void Contacts_Click(object sender, RoutedEventArgs e)
+        {
+            Frame.Navigate(typeof(ContactsPage));
+        }
+
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
             Frame.Navigate(typeof(SettingsPage));
@@ -548,9 +553,10 @@ namespace LumigramPlus.App
 
             Reconcile(wanted);
 
-            // Paging belongs to the main list. A folder shows what is loaded, and
-            // the archive is fetched whole when it is opened.
-            LoadMoreButton.Visibility = _hasMore && _selectedFolder == MainList
+            // A folder is a filter over the main list, so paging the main list is
+            // how a folder gets more chats too. The archive is a list of its own,
+            // fetched when it is opened, and has no paging here.
+            LoadMoreButton.Visibility = _hasMore && _selectedFolder != Folders.ArchiveFolderId
                 ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -565,7 +571,7 @@ namespace LumigramPlus.App
         /// </summary>
         private async void LoadMore_Click(object sender, RoutedEventArgs e)
         {
-            if (_loadingMore || _dialogs.Count == 0) return;
+            if (_loadingMore || _all.Count == 0) return;
 
             _loadingMore = true;
             LoadMoreButton.IsEnabled = false;
@@ -573,40 +579,34 @@ namespace LumigramPlus.App
 
             try
             {
-                // The last of the main list as loaded, not as shown: with a search
-                // typed or a folder open, the last row on screen can be any chat,
-                // and paging from it skips or repeats whole pages.
-                DialogItem last = LastLoaded();
-                if (last == null) return;
-
                 MtprotoClient client = await TelegramService.ConnectAsync();
 
-                Messages.DialogPage page = await Messages.GetDialogPageAsync(
-                    client,
-                    PageSize,
-                    last.Entry != null ? last.Entry.TopMessageDate : 0,
-                    last.Entry != null ? last.Entry.TopMessageId : 0,
-                    Messages.InputPeerFor(last.Kind, last.PeerId, last.AccessHash),
-                    TelegramService.Info);
-
-                int now = Now();
+                // In a folder, or with a search typed, a page of the main list may
+                // hold none of the chats on screen - the button would then seem to
+                // do nothing. So keep going until something new shows, up to a few
+                // pages, which is enough for any folder that is not nearly empty.
+                int shownBefore = _dialogs.Count;
+                bool filtered = _selectedFolder != MainList || _search.Length > 0;
+                int pages = filtered ? MaxPagesPerTap : 1;
                 int added = 0;
 
-                foreach (DialogEntry d in page.Entries)
+                for (int i = 0; i < pages && _hasMore; i++)
                 {
-                    // The entry the offset was taken from comes back as the first of
-                    // the next page.
-                    if (Find(d.PeerId) != null) continue;
+                    int addedNow = await LoadNextPageAsync(client);
+                    added += addedNow;
 
-                    _all.Add(ItemFor(d, now));
-                    added++;
+                    ApplyFolder();
+                    if (_dialogs.Count > shownBefore) break;
                 }
 
-                // A page that adds nothing new is the end, whatever the server says.
-                _hasMore = page.HasMore && added > 0;
+                string status = "";
+                if (added == 0) status = "No more chats.";
+                else if (_dialogs.Count == shownBefore)
+                    status = _hasMore
+                        ? "Nothing new for this folder yet - tap again to look further."
+                        : "No more chats in this folder.";
 
-                ApplyFolder();
-                SetBusy(false, added == 0 ? "No more chats." : "");
+                SetBusy(false, status);
 
                 if (added > 0) FetchAvatars(client);
             }
@@ -621,6 +621,51 @@ namespace LumigramPlus.App
                 _loadingMore = false;
                 LoadMoreButton.IsEnabled = true;
             }
+        }
+
+        /// <summary>How many pages one tap may fetch while looking for a folder's chats.</summary>
+        private const int MaxPagesPerTap = 5;
+
+        /// <summary>
+        /// Appends one page of the main list to everything loaded, and says how
+        /// many chats were new. Clears _hasMore at the end of the list.
+        /// </summary>
+        private async Task<int> LoadNextPageAsync(MtprotoClient client)
+        {
+            // The last of the main list as loaded, not as shown: with a search
+            // typed or a folder open, the last row on screen can be any chat,
+            // and paging from it skips or repeats whole pages.
+            DialogItem last = LastLoaded();
+            if (last == null)
+            {
+                _hasMore = false;
+                return 0;
+            }
+
+            Messages.DialogPage page = await Messages.GetDialogPageAsync(
+                client,
+                PageSize,
+                last.Entry != null ? last.Entry.TopMessageDate : 0,
+                last.Entry != null ? last.Entry.TopMessageId : 0,
+                Messages.InputPeerFor(last.Kind, last.PeerId, last.AccessHash),
+                TelegramService.Info);
+
+            int now = Now();
+            int added = 0;
+
+            foreach (DialogEntry d in page.Entries)
+            {
+                // The entry the offset was taken from comes back as the first of
+                // the next page.
+                if (Find(d.PeerId) != null) continue;
+
+                _all.Add(ItemFor(d, now));
+                added++;
+            }
+
+            // A page that adds nothing new is the end, whatever the server says.
+            _hasMore = page.HasMore && added > 0;
+            return added;
         }
 
         // ---- search ------------------------------------------------------------

@@ -18,6 +18,62 @@ namespace Lumigram.Harness
     /// </summary>
     internal static class ApiCommand
     {
+        /// <summary>
+        /// help.getCountriesList against a real datacenter, no account needed:
+        /// countries [host] [number-to-try...]
+        ///
+        /// Proves the calling codes the contacts page relies on are read correctly
+        /// from what the server actually sends, and shows what each given number
+        /// would be tried as, taking the first code of the list as "own".
+        /// </summary>
+        public static int RunCountries(string[] args)
+        {
+            string host = args.Length > 1 ? args[1] : TelegramServers.ProductionDc2Host;
+
+            try
+            {
+                return RunCountriesAsync(host, args).GetAwaiter().GetResult();
+            }
+            catch (AggregateException ex)
+            {
+                Report(ex.InnerException);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Report(ex);
+                return 1;
+            }
+        }
+
+        private static async Task<int> RunCountriesAsync(string host, string[] args)
+        {
+            using (var transport = new TcpTransport())
+            {
+                var client = new MtprotoClient(new DesktopCrypto(), transport, s => { });
+                Console.WriteLine("connecting to {0}...", host);
+                await client.ConnectAsync(host, TelegramServers.DefaultPort);
+
+                var info = ClientInfo.Default;
+                info.ApiId = Secrets.ApiId;
+                info.ApiHash = Secrets.ApiHash;
+
+                var codes = await PhoneNumbers.GetCallingCodesAsync(client, info);
+                Console.WriteLine("{0} calling codes: {1}", codes.Count, string.Join(" ", codes));
+
+                foreach (string probe in new[] { "16175551234", "447911123456", "79161234567",
+                                                 "972501234567", "4930123456", "12684123456" })
+                    Console.WriteLine("  {0} -> code {1}", probe,
+                                      PhoneNumbers.CodeOf(probe, codes) ?? "(none)");
+
+                for (int i = 2; i < args.Length; i++)
+                    Console.WriteLine("  '{0}' as +44 user tries: {1}", args[i],
+                                      string.Join(", ", PhoneNumbers.Candidates(args[i], "44")));
+
+                return codes.Count > 100 ? 0 : 1;
+            }
+        }
+
         public static int RunNearestDc(string[] args)
         {
             string host = args.Length > 1 ? args[1] : TelegramServers.TestDc2Host;

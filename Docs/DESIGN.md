@@ -225,6 +225,27 @@ The proxy page is reachable from the sign-in screen as well as Settings, because
 blocking network there is no signing in without it. Calls are not proxied: they are
 UDP, which this kind of SOCKS5 setup does not carry.
 
+## Writing to someone in the address book
+
+The contacts page (chat list, "..." menu) reads the phone's address book with
+`ContactManager.RequestStoreAsync` (the `m3:Capability contacts`) and lists one
+row per number. Nothing is uploaded: tapping a number looks up that one number
+with `contacts.resolvePhone`, the read-only lookup, never `importContacts`.
+
+Address books hold numbers the way people dial them - "07911 123456",
+"(617) 555-1234", "8 916 ..." - and Telegram finds people only by the
+international form. `Core/Mtproto/PhoneNumbers.cs` turns each into at most two
+candidates, using the calling code of the account's own number. The codes come
+from `help.getCountriesList` (works signed out; `countries` in the harness
+fetches it live - 237 codes on 2026-10-14). That list carries both `1` and
+`1684`/`1876`..., so the match is longest-first, and any `1xxx` own code is
+folded back to `1`, since the whole North American plan dials ten digits
+locally. A trunk `0` is always local; a leading `8` is a trunk only for `+7`.
+
+Someone whose privacy allows lookup by number only for their contacts is
+indistinguishable from someone not on Telegram (`PHONE_NOT_OCCUPIED`), and the
+page says so rather than claiming they are not on Telegram.
+
 ## State
 
 Done, and verified against live Telegram:

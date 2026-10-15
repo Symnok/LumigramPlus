@@ -44,8 +44,11 @@ namespace Lumigram.Harness
                     Console.WriteLine();
                     Console.WriteLine("== socks5 ==");
                     bool socks = Socks5Tests.RunAll();
+                    Console.WriteLine();
+                    Console.WriteLine("== phone numbers ==");
+                    bool phones = PhoneNumberTests.RunAll();
 
-                    bool all = bigint && crypto && tl && links && calls && voip && jitter && socks;
+                    bool all = bigint && crypto && tl && links && calls && voip && jitter && socks && phones;
                     Console.WriteLine();
                     Console.WriteLine(all ? "ALL PASS" : "FAILURES PRESENT");
                     return all ? 0 : 1;
@@ -70,6 +73,12 @@ namespace Lumigram.Harness
 
                 case "nearestdc":
                     return ApiCommand.RunNearestDc(args);
+
+                case "phones":
+                    return PhoneNumberTests.RunAll() ? 0 : 1;
+
+                case "countries":
+                    return ApiCommand.RunCountries(args);
 
                 case "sendcode":
                     return LoginCommand.RunSendCode(args);
@@ -123,7 +132,7 @@ namespace Lumigram.Harness
                     return ListenCommand.RunDiffTest(args);
 
                 default:
-                    Console.WriteLine("usage: Lumigram.Harness [test|bigint|crypto|tl|handshake|nearestdc|sendcode <phone> [host]|signin <code>|qrlogin|password <pw>|send <text>|history [n]|dialogs [n]|topics <forum> [topic]|listen [seconds]|voice <file.opus>|voicemake <out.opus>|skewtest|difftest]");
+                    Console.WriteLine("usage: Lumigram.Harness [test|bigint|crypto|tl|handshake|nearestdc|countries|sendcode <phone> [host]|signin <code>|qrlogin|password <pw>|send <text>|history [n]|dialogs [n]|topics <forum> [topic]|listen [seconds]|voice <file.opus>|voicemake <out.opus>|skewtest|difftest]");
                     return 2;
             }
         }

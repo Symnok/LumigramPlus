@@ -466,6 +466,25 @@ namespace Lumigram.Tl
         // contacts.resolvedPeer#7f077ad9 peer:Peer chats:Vector<Chat> users:Vector<User>
         public const uint ContactsResolvedPeer = 0x7f077ad9;
 
+        // help.getCountriesList#735787a8 lang_code:string hash:int = help.CountriesList
+        //
+        // Works before sign-in too: it is the list the sign-in screen picks a
+        // country from. Used here only for its calling codes.
+        public const uint HelpGetCountriesList = 0x735787a8;
+
+        // help.countriesList#87d0759e countries:Vector<help.Country> hash:int
+        public const uint HelpCountriesList = 0x87d0759e;
+        public const uint HelpCountriesListNotModified = 0x93cc1f32;
+
+        // help.country#c3878e23 flags:# hidden:flags.0?true iso2:string
+        //   default_name:string name:flags.1?string
+        //   country_codes:Vector<help.CountryCode> = help.Country
+        public const uint HelpCountry = 0xc3878e23;
+
+        // help.countryCode#4203c5ef flags:# country_code:string
+        //   prefixes:flags.0?Vector<string> patterns:flags.1?Vector<string>
+        public const uint HelpCountryCode = 0x4203c5ef;
+
         // --- media -----------------------------------------------------------
         // upload.getFile#be5335be flags:# precise:flags.0?true cdn_supported:flags.1?true
         //   location:InputFileLocation offset:long limit:int = upload.File

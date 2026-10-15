@@ -148,6 +148,11 @@
                           Click="Search_Click"/>
             <AppBarButton Icon="Add" Label="find" Click="Find_Click"/>
             <AppBarButton Icon="Setting" Label="settings" Click="Settings_Click"/>
+            <!-- In the "..." menu: the bar already holds the four buttons a phone
+                 app bar has room for. -->
+            <CommandBar.SecondaryCommands>
+                <AppBarButton Label="contacts" Click="Contacts_Click"/>
+            </CommandBar.SecondaryCommands>
         </CommandBar>
     </Page.BottomAppBar>
 </Page>
