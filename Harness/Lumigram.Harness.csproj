@@ -65,6 +65,7 @@
     <Compile Include="LinkTests.cs" />
     <Compile Include="Socks5Tests.cs" />
     <Compile Include="PhoneNumberTests.cs" />
+    <Compile Include="MtProxyTests.cs" />
     <Compile Include="DesktopCrypto.cs" />
     <Compile Include="TcpTransport.cs" />
     <Compile Include="HandshakeCommand.cs" />
@@ -89,6 +90,12 @@
     </Compile>
     <Compile Include="..\Core\Crypto\ICrypto.cs">
       <Link>Core\Crypto\ICrypto.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Crypto\AesCtr.cs">
+      <Link>Core\Crypto\AesCtr.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Crypto\HmacSha256.cs">
+      <Link>Core\Crypto\HmacSha256.cs</Link>
     </Compile>
     <Compile Include="..\Core\Crypto\Aes256.cs">
       <Link>Core\Crypto\Aes256.cs</Link>
@@ -212,6 +219,15 @@
     </Compile>
     <Compile Include="..\Core\Mtproto\PhoneNumbers.cs">
       <Link>Core\Mtproto\PhoneNumbers.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\FakeTls.cs">
+      <Link>Core\Mtproto\FakeTls.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\MtProxy.cs">
+      <Link>Core\Mtproto\MtProxy.cs</Link>
+    </Compile>
+    <Compile Include="..\Core\Mtproto\MtProxyTransport.cs">
+      <Link>Core\Mtproto\MtProxyTransport.cs</Link>
     </Compile>
     <Compile Include="..\Core\Mtproto\Socks5Transport.cs">
       <Link>Core\Mtproto\Socks5Transport.cs</Link>

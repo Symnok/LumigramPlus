@@ -466,6 +466,12 @@ namespace Lumigram.Tl
         // contacts.resolvedPeer#7f077ad9 peer:Peer chats:Vector<Chat> users:Vector<User>
         public const uint ContactsResolvedPeer = 0x7f077ad9;
 
+        // messageEntityTextUrl#76a6d327 offset:int length:int url:string
+        //
+        // A link behind some of a message's words. The only entity read: it is the
+        // only one whose address is not in the text itself.
+        public const uint MessageEntityTextUrl = 0x76a6d327;
+
         // help.getCountriesList#735787a8 lang_code:string hash:int = help.CountriesList
         //
         // Works before sign-in too: it is the list the sign-in screen picks a

@@ -15,6 +15,16 @@ namespace LumigramPlus.App
         Periodic = 1,
     }
 
+    /// <summary>Which kind of proxy the host and port describe.</summary>
+    internal enum ProxyKind
+    {
+        /// <summary>An ordinary SOCKS5 proxy: a tunnel, asked for by address.</summary>
+        Socks5 = 0,
+
+        /// <summary>An MTProto proxy: Telegram's own kind, disguised, with a secret.</summary>
+        MtProto = 1,
+    }
+
     /// <summary>
     /// How large the text people read is drawn.
     ///
@@ -75,6 +85,8 @@ namespace LumigramPlus.App
         private const string ProxyPortKey = "proxyPort";
         private const string ProxyUserKey = "proxyUser";
         private const string ProxyPasswordKey = "proxyPassword";
+        private const string ProxyKindKey = "proxyKind";
+        private const string ProxySecretKey = "proxySecret";
 
         /// <summary>
         /// Whether pictures are fetched as soon as they appear.
@@ -256,7 +268,7 @@ namespace LumigramPlus.App
         {
             get
             {
-                if (!ProxyEnabled) return null;
+                if (!ProxyEnabled || ProxyKind != ProxyKind.Socks5) return null;
 
                 var proxy = new ProxySettings
                 {
@@ -267,6 +279,69 @@ namespace LumigramPlus.App
                 };
 
                 return proxy.IsUsable ? proxy : null;
+            }
+        }
+
+        /// <summary>
+        /// The MTProto proxy to connect through, or null.
+        ///
+        /// The same host and port settings as SOCKS5 - the kind decides which one
+        /// they describe - so switching between the two keeps the address typed in.
+        /// Null as well when the secret does not decode; the proxy page says why.
+        /// </summary>
+        public static MtProxySettings MtProxy
+        {
+            get
+            {
+                if (!ProxyEnabled || ProxyKind != ProxyKind.MtProto) return null;
+
+                string error;
+                var proxy = new MtProxySettings
+                {
+                    Host = ReadString(ProxyHostKey),
+                    Port = ProxyPort,
+                    Secret = MtProxySecret.Parse(ProxySecret, out error),
+                };
+
+                return proxy.IsUsable ? proxy : null;
+            }
+        }
+
+        public static ProxyKind ProxyKind
+        {
+            get
+            {
+                try
+                {
+                    object stored = ApplicationData.Current.LocalSettings.Values[ProxyKindKey];
+                    if (stored is int)
+                        return (int)stored == (int)ProxyKind.Socks5 ? ProxyKind.Socks5 : ProxyKind.MtProto;
+
+                    // Never chosen: MTProto is the default - except for a proxy set up
+                    // before there was a choice, which can only have been SOCKS5, and
+                    // must not quietly turn into an MTProto proxy with no secret.
+                    return ReadString(ProxyHostKey).Length > 0 ? ProxyKind.Socks5 : ProxyKind.MtProto;
+                }
+                catch (Exception)
+                {
+                    return ProxyKind.MtProto;
+                }
+            }
+            set
+            {
+                try { ApplicationData.Current.LocalSettings.Values[ProxyKindKey] = (int)value; }
+                catch (Exception) { }
+            }
+        }
+
+        /// <summary>The MTProto secret as the user typed or pasted it - hex or base64.</summary>
+        public static string ProxySecret
+        {
+            get { return ReadString(ProxySecretKey); }
+            set
+            {
+                try { ApplicationData.Current.LocalSettings.Values[ProxySecretKey] = value ?? ""; }
+                catch (Exception) { }
             }
         }
 

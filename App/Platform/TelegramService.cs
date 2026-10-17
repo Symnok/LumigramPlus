@@ -96,7 +96,7 @@ namespace LumigramPlus.App
 
             if (Session == null) Session = await SessionStore.LoadAsync();
 
-            ITransport transport = PhoneTransport.Open();
+            ITransport transport = PhoneTransport.Open(Session != null ? Session.TimeOffset : 0);
             var client = new MtprotoClient(Crypto, transport, delegate { });
             client.Info = Info;
 
@@ -143,7 +143,7 @@ namespace LumigramPlus.App
 
             string host = TelegramServers.HostFor(dcId);
 
-            ITransport transport = PhoneTransport.Open();
+            ITransport transport = PhoneTransport.Open(Session != null ? Session.TimeOffset : 0);
             var client = new MtprotoClient(Crypto, transport, delegate { });
             client.Info = Info;
 

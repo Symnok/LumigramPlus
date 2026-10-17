@@ -18,17 +18,26 @@ namespace Lumigram.Phone
     internal sealed class PhoneTransport : ITransport
     {
         /// <summary>
-        /// A connection to a datacenter: straight there, or through the SOCKS5
-        /// proxy when the user has set one.
+        /// A connection to a datacenter: straight there, or through the proxy the
+        /// user has set - SOCKS5 or MTProto.
         ///
         /// Every connection is made through here - the main one, the extra ones
         /// files are fetched over, and the background task's - so none can go
         /// around the proxy. On a network that blocks Telegram one that did would
         /// simply fail; on one that watches, it would show the user's real address.
         /// </summary>
-        public static ITransport Open()
+        /// <param name="timeOffset">
+        /// The session's measured clock error, in seconds. A FakeTLS proxy refuses
+        /// a handshake stamped more than a few minutes wrong, and phone clocks
+        /// drift.
+        /// </param>
+        public static ITransport Open(int timeOffset = 0)
         {
             ITransport socket = new PhoneTransport();
+
+            MtProxySettings mtproxy = AppSettings.MtProxy;
+            if (mtproxy != null)
+                return new MtProxyTransport(socket, mtproxy, new PhoneCrypto(), timeOffset);
 
             ProxySettings proxy = AppSettings.Proxy;
             return proxy == null ? socket : new Socks5Transport(socket, proxy);

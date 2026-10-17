@@ -47,8 +47,12 @@ namespace Lumigram.Harness
                     Console.WriteLine();
                     Console.WriteLine("== phone numbers ==");
                     bool phones = PhoneNumberTests.RunAll();
+                    Console.WriteLine();
+                    Console.WriteLine("== mtproto proxy ==");
+                    bool mtproxy = MtProxyTests.RunAll();
 
-                    bool all = bigint && crypto && tl && links && calls && voip && jitter && socks && phones;
+                    bool all = bigint && crypto && tl && links && calls && voip && jitter && socks && phones &&
+                               mtproxy;
                     Console.WriteLine();
                     Console.WriteLine(all ? "ALL PASS" : "FAILURES PRESENT");
                     return all ? 0 : 1;
@@ -70,6 +74,12 @@ namespace Lumigram.Harness
 
                 case "socks":
                     return HandshakeCommand.RunThroughProxy(args);
+
+                case "mtproxytest":
+                    return MtProxyTests.RunAll() ? 0 : 1;
+
+                case "mtproxy":
+                    return ApiCommand.RunThroughMtProxy(args);
 
                 case "nearestdc":
                     return ApiCommand.RunNearestDc(args);
@@ -132,7 +142,7 @@ namespace Lumigram.Harness
                     return ListenCommand.RunDiffTest(args);
 
                 default:
-                    Console.WriteLine("usage: Lumigram.Harness [test|bigint|crypto|tl|handshake|nearestdc|countries|sendcode <phone> [host]|signin <code>|qrlogin|password <pw>|send <text>|history [n]|dialogs [n]|topics <forum> [topic]|listen [seconds]|voice <file.opus>|voicemake <out.opus>|skewtest|difftest]");
+                    Console.WriteLine("usage: Lumigram.Harness [test|bigint|crypto|tl|handshake|nearestdc|countries|mtproxy <host:port> <secret>|sendcode <phone> [host]|signin <code>|qrlogin|password <pw>|send <text>|history [n]|dialogs [n]|topics <forum> [topic]|listen [seconds]|voice <file.opus>|voicemake <out.opus>|skewtest|difftest]");
                     return 2;
             }
         }

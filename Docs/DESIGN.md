@@ -246,6 +246,45 @@ Someone whose privacy allows lookup by number only for their contacts is
 indistinguishable from someone not on Telegram (`PHONE_NOT_OCCUPIED`), and the
 page says so rather than claiming they are not on Telegram.
 
+## MTProto proxy
+
+Proxy page: kind SOCKS5 or MTProto, a secret field (hex or base64, as lists
+publish them), and a box to paste a whole `t.me/proxy?...` / `tg://proxy?...`
+link. A proxy link tapped in a chat - including one hidden behind words as a
+`messageEntityTextUrl`, which is how proxy channels post them - asks first, then
+saves and opens the page, which reconnects and makes one real request
+(`help.getNearestDc`). That request is the only test: an MTProto proxy accepts
+TCP whatever the secret and goes silent on a wrong one.
+
+`Core/Mtproto/MtProxyTransport.cs` wraps any `ITransport`, like the SOCKS5 one,
+and every connection gets it through `PhoneTransport.Open`. It dials the proxy
+and names the DC in the 64 opening bytes (obfuscated2; DC from
+`TelegramServers.DcFor(host)`, since sessions store a host). The framing learns
+through `IFramingOptions` that the tag already went and whether to pad. Secret
+16 bytes: plain. `dd`+16: padded intermediate (0-15 random bytes per packet; the
+receiver finds the real end from the MTProto message - see
+`MtprotoFraming.UnpaddedLength`). `ee`+16+domain: FakeTLS (`FakeTls.cs`).
+
+Ported from Symbigram, but checked against TDLib (`td/mtproto/TlsInit.cpp`,
+`TcpTransport.cpp`), which differs from Symbigram in two places:
+- the payload of the server's first application-data record is filler and is
+  discarded (Symbigram feeds it into the stream - fine against its own test
+  proxy, which sent it empty, but real proxies send random bytes there);
+- the client sends a ChangeCipherSpec before its first record, and cuts
+  records at 2878 bytes.
+
+The FakeTLS hello is stamped with the time and refused a few minutes out, so
+`Open` passes the session's measured `TimeOffset`.
+
+Tests: `Lumigram.Harness test` (NIST/RFC vectors, .NET's AES and HMAC as
+references, secrets, links, padding, the hello). Live, no account needed:
+`python Harness/relay_mtproxy.py <secret-hex> 18443` - an independent proxy
+that does the server side and relays to the real DC - then
+`Lumigram.Harness mtproxy 127.0.0.1:18443 <secret> [dc-ip] [clock-offset]`, which
+runs a DH handshake and an encrypted call through it. Verified 2026-10-16 for
+plain, dd and ee (secret given as base64url); +3600 s offset and a wrong secret
+are both refused with a message naming the cause.
+
 ## State
 
 Done, and verified against live Telegram:

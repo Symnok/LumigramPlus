@@ -16,6 +16,9 @@ namespace Lumigram.Mtproto
         public long PeerId;
         public string Text;
         public string Note;          // set when the message is not plain text
+
+        /// <summary>Links hidden behind words of Text, or null when there are none.</summary>
+        public List<TextLink> HiddenLinks;
         public MediaInfo Media;      // null when the message is text only
 
         /// <summary>
@@ -459,6 +462,33 @@ namespace Lumigram.Mtproto
             TlReader r = await client.InvokeAsync(q.ToArray(), info);
             TlObject result = TlSchema.ReadObject(r);
             return result.Ctor == TlConstructors.AuthLoggedOut;
+        }
+
+        /// <summary>
+        /// The links a message carries behind its words (messageEntityTextUrl), or
+        /// null when it has none. Every other kind of entity is formatting, or
+        /// marks a link that is already in the text, which Links finds by itself.
+        /// </summary>
+        public static List<TextLink> ReadHiddenLinks(TlObject m)
+        {
+            if (m == null || !m.Has("entities")) return null;
+
+            List<TextLink> links = null;
+            foreach (object o in m.Vec("entities"))
+            {
+                var e = o as TlObject;
+                if (e == null || e.Ctor != TlConstructors.MessageEntityTextUrl) continue;
+
+                if (links == null) links = new List<TextLink>();
+                links.Add(new TextLink
+                {
+                    Offset = e.IntOr("offset", 0),
+                    Length = e.IntOr("length", 0),
+                    Url = e.Has("url") ? e.Str("url") : null,
+                });
+            }
+
+            return links;
         }
 
         /// <summary>The signed-in user, for display in the UI.</summary>
@@ -1060,6 +1090,7 @@ namespace Lumigram.Mtproto
             t.Date = m.IntOr("date", 0);
             t.Out = m.Flag("flags", 1);
             t.Text = m.Has("message") ? m.Str("message") : null;
+            t.HiddenLinks = ReadHiddenLinks(m);
 
             if (m.Has("from_id")) t.FromId = PeerId(m.Obj("from_id"));
             if (m.Has("peer_id"))

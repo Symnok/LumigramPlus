@@ -1,5 +1,6 @@
 using System;
-using Windows.UI.Xaml;
+using System.Threading.Tasks;
+using Windows.UI.Popups;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Navigation;
 using Lumigram.Mtproto;
@@ -7,102 +8,67 @@ using Lumigram.Mtproto;
 namespace LumigramPlus.App
 {
     /// <summary>
-    /// Setting up the SOCKS5 proxy.
-    ///
-    /// A page of its own because it is opened from two places: the settings, and
-    /// the sign-in screen. The second matters most - on a network that blocks
-    /// Telegram there is no signing in without the proxy, and so no reaching the
-    /// settings to set it up.
-    ///
-    /// Saving reconnects at once and says how that went. A wrong port or password
-    /// found here, with the fields still on screen, is a typo; found later as
-    /// "cannot connect" on the chat list, it is a mystery.
+    /// The proxy settings on a page of their own, for the places that cannot show
+    /// the settings' "proxy" tab: the sign-in screen, before there is anything to
+    /// set, and a proxy link tapped in a chat. The settings themselves are
+    /// ProxyPanel, shared with that tab.
     /// </summary>
     public sealed partial class ProxyPage : Page
     {
+        /// <summary>Navigation parameter: test the saved settings as soon as the page opens.</summary>
+        public const string TestNow = "test";
+
         public ProxyPage()
         {
             InitializeComponent();
         }
 
-        protected override void OnNavigatedTo(NavigationEventArgs e)
+        protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
 
-            EnabledSwitch.IsOn = AppSettings.ProxyEnabled;
-            HostBox.Text = AppSettings.ProxyHost;
-            PortBox.Text = AppSettings.ProxyPort.ToString();
-            UserBox.Text = AppSettings.ProxyUser;
-            PasswordBox.Password = AppSettings.ProxyPassword;
-        }
-
-        private async void Save_Click(object sender, RoutedEventArgs e)
-        {
-            string host = (HostBox.Text ?? "").Trim();
-            string user = (UserBox.Text ?? "").Trim();
-            bool enabled = EnabledSwitch.IsOn;
-
-            int port;
-            if (!int.TryParse((PortBox.Text ?? "").Trim(), out port)) port = 0;
-
-            // Checked only when it is going to be used. Switching the proxy off
-            // with a half-typed address in the boxes is a reasonable thing to do,
-            // and refusing it would trap the user on a setting that does not work.
-            if (enabled && host.Length == 0)
-            {
-                StatusText.Text = "Enter the proxy's address, or switch the proxy off.";
-                return;
-            }
-
-            if (enabled && (port <= 0 || port > 65535))
-            {
-                StatusText.Text = "The port is a number from 1 to 65535 - 1080 is the usual one.";
-                return;
-            }
-
-            AppSettings.SetProxy(host, port > 0 ? port : 1080, user, PasswordBox.Password);
-            AppSettings.ProxyEnabled = enabled;
-
-            await ReconnectAsync(enabled);
+            Panel.Load();
+            if (e.Parameter as string == TestNow && AppSettings.ProxyEnabled)
+                await Panel.TestAsync();
         }
 
         /// <summary>
-        /// Drops the current connection and makes a new one the new way.
+        /// A proxy link tapped in a chat: asks, then sets it up and tests it.
         ///
-        /// Every connection is built through PhoneTransport.Open, which reads the
-        /// setting just saved - so dropping the old ones is all it takes for the
-        /// next to go through the proxy, or not.
+        /// Asked first because accepting sends everything this app says through a
+        /// server run by whoever posted the link, and a stray tap should not do
+        /// that. Returns a sentence when the link is unusable, or null.
         /// </summary>
-        private async System.Threading.Tasks.Task ReconnectAsync(bool viaProxy)
+        public static async Task<string> OfferAsync(Frame frame, string url)
         {
-            SaveButton.IsEnabled = false;
-            Busy.Visibility = Visibility.Visible;
-            StatusText.Text = viaProxy ? "Connecting through the proxy..." : "Connecting directly...";
+            string error;
+            ProxyLink link = ProxyLink.Parse(url, out error);
+            if (link == null) return error;
 
-            try
-            {
-                TelegramService.Disconnect();
-                await TelegramService.ConnectAsync();
+            string type = link.IsMtproto ? "MTProto proxy" : "SOCKS5 proxy";
+            var dialog = new MessageDialog(
+                "Connect through the " + type + " " + link.Server + ":" + link.Port + "?\n\n" +
+                "Everything Lumigram+ sends will pass through that server, which is run by " +
+                "whoever published the link. It can see when and how much you use Telegram, " +
+                "though not what you say.",
+                "use this proxy?");
 
-                StatusText.Text = viaProxy
-                    ? "Connected to Telegram through the proxy."
-                    : "Connected to Telegram directly.";
-            }
-            catch (Socks5Exception ex)
-            {
-                // Already a sentence about the proxy - which part of it is wrong.
-                StatusText.Text = "Not connected: " + ex.Message + ".";
-            }
-            catch (Exception ex)
-            {
-                var rpc = ex as RpcException;
-                StatusText.Text = "Not connected: " + (rpc != null ? rpc.ErrorType : ex.Message);
-            }
-            finally
-            {
-                SaveButton.IsEnabled = true;
-                Busy.Visibility = Visibility.Collapsed;
-            }
+            bool accepted = false;
+            dialog.Commands.Add(new UICommand("use it", delegate { accepted = true; }));
+            dialog.Commands.Add(new UICommand("cancel"));
+            dialog.DefaultCommandIndex = 0;
+            dialog.CancelCommandIndex = 1;
+
+            await dialog.ShowAsync();
+            if (!accepted) return null;
+
+            AppSettings.SetProxy(link.Server, link.Port, link.User ?? "", link.Password ?? "");
+            if (link.IsMtproto) AppSettings.ProxySecret = link.SecretText;
+            AppSettings.ProxyKind = link.IsMtproto ? ProxyKind.MtProto : ProxyKind.Socks5;
+            AppSettings.ProxyEnabled = true;
+
+            frame.Navigate(typeof(ProxyPage), TestNow);
+            return null;
         }
     }
 }

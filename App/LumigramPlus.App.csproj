@@ -150,6 +150,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="ProxyPanel.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="ProxyPage.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -197,6 +201,9 @@
     </Compile>
     <Compile Include="ContactsPage.xaml.cs">
       <DependentUpon>ContactsPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="ProxyPanel.xaml.cs">
+      <DependentUpon>ProxyPanel.xaml</DependentUpon>
     </Compile>
     <Compile Include="ProxyPage.xaml.cs">
       <DependentUpon>ProxyPage.xaml</DependentUpon>

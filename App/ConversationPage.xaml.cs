@@ -116,6 +116,10 @@ namespace LumigramPlus.App
             get { return _text; }
             set
             {
+                // Links hidden behind words are placed by offsets into the text,
+                // so new text - an edit - leaves them pointing at the wrong words.
+                if (value != _text) HiddenLinks = null;
+
                 _text = value;
                 Raise("Text");
                 Raise("TextVisibility");
@@ -453,6 +457,12 @@ namespace LumigramPlus.App
         /// quietly is not a link is worse than offering none.
         /// </summary>
         public bool CanLink { get; set; }
+
+        /// <summary>
+        /// Links the sender put behind words, which the text alone does not show.
+        /// Read once, when the body's inlines are built; not bound.
+        /// </summary>
+        public List<TextLink> HiddenLinks;
 
         public Visibility LinkVisibility
         {
@@ -1168,6 +1178,7 @@ namespace LumigramPlus.App
                 ReplyToId = m.ReplyToId,
                 ReplyQuote = m.ReplyQuote,
                 ReplyElsewhere = m.ReplyElsewhere,
+                HiddenLinks = m.HiddenLinks,      // after Text, whose setter clears it
             };
 
             if (m.Media != null)
@@ -1253,7 +1264,7 @@ namespace LumigramPlus.App
             block.Inlines.Clear();
             if (item == null || string.IsNullOrEmpty(item.Text)) return;
 
-            foreach (TextPart part in Links.Split(item.Text))
+            foreach (TextPart part in Links.Split(item.Text, item.HiddenLinks))
             {
                 if (!part.IsLink)
                 {
@@ -1289,6 +1300,15 @@ namespace LumigramPlus.App
         private async void OpenLink(string url)
         {
             if (string.IsNullOrEmpty(url)) return;
+
+            // A proxy is set up here rather than handed to the browser, which can
+            // do nothing with it - and asked about first, inside OfferAsync.
+            if (ProxyLink.IsProxyLink(url))
+            {
+                string refused = await ProxyPage.OfferAsync(Frame, url);
+                if (refused != null) SetBusy(false, refused);
+                return;
+            }
 
             Lumigram.Tl.TelegramLink link = TelegramLinks.Parse(url);
 

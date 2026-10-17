@@ -61,7 +61,7 @@ namespace LumigramPlus.Tasks
                 return "not signed in";
 
             // Through the proxy when one is set, like every other connection.
-            ITransport transport = PhoneTransport.Open();
+            ITransport transport = PhoneTransport.Open(session.TimeOffset);
             var client = new MtprotoClient(new PhoneCrypto(), transport, delegate { });
 
             client.Info = Info;

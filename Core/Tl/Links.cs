@@ -15,6 +15,18 @@ namespace Lumigram.Tl
     }
 
     /// <summary>
+    /// A link the sender put behind some of the message's words
+    /// (messageEntityTextUrl): the words show, the address does not. Offsets count
+    /// UTF-16 code units, the same units C# strings index by.
+    /// </summary>
+    public sealed class TextLink
+    {
+        public int Offset;
+        public int Length;
+        public string Url;
+    }
+
+    /// <summary>
     /// Finds the links in a message.
     ///
     /// Telegram does send message entities describing exactly where the links are,
@@ -72,6 +84,48 @@ namespace Lumigram.Tl
             return parts;
         }
 
+        /// <summary>
+        /// Splits text into runs, taking the links hidden behind words into account
+        /// as well as the ones written out.
+        ///
+        /// Channels publish links this way all the time - proxy lists especially,
+        /// whose posts are words in Farsi or Russian with the addresses only in the
+        /// metadata - and text scanning alone cannot see them. A hidden link that
+        /// does not fit the text (a malformed entity, or text edited since) is
+        /// ignored rather than trusted.
+        /// </summary>
+        public static List<TextPart> Split(string text, IList<TextLink> hidden)
+        {
+            if (hidden == null || hidden.Count == 0 || string.IsNullOrEmpty(text))
+                return Split(text);
+
+            var sorted = new List<TextLink>(hidden);
+            sorted.Sort((a, c) => a.Offset.CompareTo(c.Offset));
+
+            var parts = new List<TextPart>();
+            int at = 0;
+
+            foreach (TextLink link in sorted)
+            {
+                if (link == null || string.IsNullOrEmpty(link.Url)) continue;
+                if (link.Offset < at || link.Length <= 0 || link.Offset + link.Length > text.Length)
+                    continue;
+
+                if (link.Offset > at) parts.AddRange(Split(text.Substring(at, link.Offset - at)));
+
+                parts.Add(new TextPart
+                {
+                    Text = text.Substring(link.Offset, link.Length),
+                    Url = link.Url.Trim(),
+                });
+
+                at = link.Offset + link.Length;
+            }
+
+            if (at < text.Length) parts.AddRange(Split(text.Substring(at)));
+            return parts;
+        }
+
         /// <summary>Just the addresses, in the order they appear.</summary>
         public static List<string> Find(string text)
         {
@@ -121,7 +175,11 @@ namespace Lumigram.Tl
 
             int length = 0;
 
-            if (Starts(text, i, "http://")) length = 7;
+            // tg:// only for proxies: they are the tg:// links people post as text,
+            // and the only ones this app can do something with.
+            if (Starts(text, i, "tg://proxy?")) length = 11;
+            else if (Starts(text, i, "tg://socks?")) length = 11;
+            else if (Starts(text, i, "http://")) length = 7;
             else if (Starts(text, i, "https://")) length = 8;
             else if (Starts(text, i, "www.")) length = 4;
             else if (Starts(text, i, "t.me/")) length = 5;
@@ -201,7 +259,8 @@ namespace Lumigram.Tl
             if (found.Length > 1 && found[0] == '@')
                 return "https://t.me/" + found.Substring(1);
 
-            if (Starts(found, 0, "http://") || Starts(found, 0, "https://")) return found;
+            if (Starts(found, 0, "http://") || Starts(found, 0, "https://") ||
+                Starts(found, 0, "tg://")) return found;
             return "http://" + found;
         }
     }

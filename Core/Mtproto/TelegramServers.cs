@@ -110,5 +110,24 @@ namespace Lumigram.Mtproto
                 default: return ProductionDc2Host;
             }
         }
+
+        /// <summary>
+        /// The datacenter an address belongs to - the reverse of HostFor.
+        ///
+        /// An MTProto proxy is told which datacenter to reach by number, while every
+        /// connection here is made by address (the session remembers its host, not
+        /// its id), so the proxy transport asks this. The test cluster's numbers are
+        /// offset by 10000, as TDLib sends them. An address it does not know is
+        /// taken for DC 2, the one sign-in starts on.
+        /// </summary>
+        public static int DcFor(string host)
+        {
+            if (host == TestDc2Host) return 10002;
+
+            for (int dc = 1; dc <= 5; dc++)
+                if (HostFor(dc) == host) return dc;
+
+            return 2;
+        }
     }
 }

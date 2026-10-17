@@ -74,6 +74,96 @@ namespace Lumigram.Harness
             }
         }
 
+        /// <summary>
+        /// A real DH handshake and an encrypted call through an MTProto proxy:
+        /// mtproxy host:port secret [datacenter-ip] [clock-error-seconds]
+        ///
+        /// The handshake sends unencrypted messages and the call encrypted ones, so
+        /// both ways of finding the end of a padded packet are exercised, in both
+        /// directions. The last argument is a clock offset, applied as the phone
+        /// applies the session's measured one.
+        /// </summary>
+        public static int RunThroughMtProxy(string[] args)
+        {
+            if (args.Length < 3 || args[1].IndexOf(':') < 0)
+            {
+                Console.WriteLine("usage: mtproxy <host:port> <secret> [datacenter-ip] [clock-error-seconds]");
+                return 2;
+            }
+
+            string[] hostPort = args[1].Split(':');
+            string error;
+            var proxy = new MtProxySettings
+            {
+                Host = hostPort[0],
+                Port = int.Parse(hostPort[1]),
+                Secret = MtProxySecret.Parse(args[2], out error),
+            };
+
+            if (proxy.Secret == null)
+            {
+                Console.WriteLine("secret: " + error);
+                return 2;
+            }
+
+            string dc = args.Length > 3 ? args[3] : TelegramServers.ProductionDc2Host;
+            int offset = args.Length > 4 ? int.Parse(args[4]) : 0;
+
+            Console.WriteLine("through MTProto proxy {0}:{1}  ({2})", proxy.Host, proxy.Port,
+                              proxy.Secret.Describe());
+
+            try
+            {
+                return RunThroughMtProxyAsync(proxy, dc, offset).GetAwaiter().GetResult();
+            }
+            catch (AggregateException ex)
+            {
+                Report(ex.InnerException);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                Report(ex);
+                return 1;
+            }
+        }
+
+        private static async Task<int> RunThroughMtProxyAsync(MtProxySettings proxy, string dc, int offset)
+        {
+            var crypto = new DesktopCrypto();
+            var sw = Stopwatch.StartNew();
+
+            // The offset is added to the clock exactly as the phone adds the
+            // session's, so a large one here is a phone whose correction is wrong -
+            // and a FakeTLS proxy should refuse it.
+            using (var transport = new MtProxyTransport(new TcpTransport(), proxy, crypto, offset))
+            {
+                var client = new MtprotoClient(crypto, transport, Console.WriteLine);
+
+                Console.WriteLine("connecting and negotiating an auth key with {0} (dc {1})...",
+                                  dc, TelegramServers.DcFor(dc));
+                await client.ConnectAsync(dc, TelegramServers.DefaultPort);
+                Console.WriteLine("auth key ready ({0} ms)", sw.ElapsedMilliseconds);
+
+                var info = ClientInfo.Default;
+                info.ApiId = Secrets.ApiId;
+                info.ApiHash = Secrets.ApiHash;
+
+                var query = new TlWriter();
+                query.WriteConstructor(TlConstructors.HelpGetNearestDc);
+                TlReader result = await client.InvokeAsync(query.ToArray(), info);
+
+                result.Expect(TlConstructors.NearestDc, "nearestDc");
+                string country = result.ReadString();
+                int thisDc = result.ReadInt();
+
+                Console.WriteLine();
+                Console.WriteLine("SUCCESS through the proxy - country {0}, this_dc {1}, {2} ms",
+                                  country, thisDc, sw.ElapsedMilliseconds);
+                return 0;
+            }
+        }
+
         public static int RunNearestDc(string[] args)
         {
             string host = args.Length > 1 ? args[1] : TelegramServers.TestDc2Host;

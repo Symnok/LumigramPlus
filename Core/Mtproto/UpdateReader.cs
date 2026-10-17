@@ -190,6 +190,7 @@ namespace Lumigram.Mtproto
                 Date = u.IntOr("date", 0),
                 Out = u.Flag("flags", 1),
                 Text = u.Has("message") ? u.Str("message") : null,
+                HiddenLinks = Messages.ReadHiddenLinks(u),
             };
 
             if (u.Has("user_id")) m.FromId = u.Long("user_id");
