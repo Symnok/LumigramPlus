@@ -414,8 +414,11 @@
                           SelectionMode="None" ItemClick="ForwardTarget_Click">
                     <ListView.ItemTemplate>
                         <DataTemplate>
+                            <!-- The chat list's size, which follows the text size
+                                 setting; the default was far too small to aim at. -->
                             <TextBlock Text="{Binding Title}" TextWrapping="NoWrap"
                                        TextTrimming="CharacterEllipsis"
+                                       FontSize="{StaticResource AppListTitleFontSize}"
                                        Margin="0,10,0,10"/>
                         </DataTemplate>
                     </ListView.ItemTemplate>
